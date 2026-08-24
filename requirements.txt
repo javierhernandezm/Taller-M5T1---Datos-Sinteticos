@@ -1,0 +1,30 @@
+# ---------------------------------------------------------------------------
+# Ruta pip (equipos que no usan uv, y Google Colab).
+#   python -m venv .venv && .venv\Scripts\activate     (Windows)
+#   python -m venv .venv && source .venv/bin/activate  (macOS / Linux)
+#   pip install -r requirements.txt
+#
+# El entorno canónico y reproducible bit a bit es uv + uv.lock (ver README).
+# Este fichero es la ruta portable: mismas dependencias, sin bloqueo exacto.
+#
+# AVISO GPU EN WINDOWS: el `torch` de PyPI es CPU-only en Windows. Todo el
+# proyecto FUNCIONA en CPU (más lento), pero para usar una GPU NVIDIA hay que
+# instalar torch aparte, desde el índice CUDA de PyTorch, ANTES de este fichero:
+#
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+#
+# cu128 = CUDA 12.8, necesario para GPUs Blackwell (RTX 50xx, sm_120). Para
+# GPUs anteriores sirve cu121 o cu124. En Linux y en Colab el torch de PyPI ya
+# trae CUDA y no hace falta nada especial.
+# ---------------------------------------------------------------------------
+
+numpy>=1.26
+pandas>=2.1
+pyarrow>=14.0
+scipy>=1.11
+scikit-learn>=1.4
+matplotlib>=3.8
+torch>=2.7
+jupyterlab>=4.0
+ipykernel>=6.29
+tqdm>=4.66

@@ -1,0 +1,15 @@
+# Normaliza finales de línea: el equipo trabaja en Windows y macOS.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Los notebooks son el entregable y se versionan CON sus salidas (el enunciado
+# exige ver las curvas de loss). Marcarlos como texto evita que git los trate
+# como binarios en los diffs.
+*.ipynb text
+
+# Binarios: sin conversión de EOL
+*.npz binary
+*.pt binary
+*.png binary
+*.parquet binary

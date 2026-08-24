@@ -1,0 +1,52 @@
+[project]
+name = "taller-b5t1"
+version = "0.1.0"
+description = "Taller B5-T1 (MIAX 14) - generacion de datos financieros sinteticos"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    # --- core data ---------------------------------------------------------
+    "numpy>=2.5.2",
+    "pandas>=3.0.5",
+    "pyarrow>=25.0.1",
+    "scipy>=1.18.0",
+    # --- deep learning -----------------------------------------------------
+    # torch es el motor de computo (GPU). Floor en 2.7 porque es la primera
+    # release con soporte Blackwell (sm_120), la arquitectura de la RTX 5070.
+    "torch>=2.7",
+    # --- plotting ----------------------------------------------------------
+    "matplotlib>=3.11.1",
+    # --- notebooks / tooling -----------------------------------------------
+    "jupyterlab>=4.6.3",
+    "ipykernel>=7.3.0",
+    "tqdm>=4.70.0",
+]
+
+[dependency-groups]
+dev = ["ruff>=0.14.0"]
+
+# El codigo vive en src/ y los notebooks lo importan via sys.path, no como
+# paquete instalado: no hay nada que construir.
+[tool.uv]
+package = false
+
+# --------------------------------------------------------------------------- #
+# GPU PyTorch
+#
+# Mismo patron que C:\dev\lab. El `torch` de PyPI es CPU-only en Windows; las
+# builds con CUDA viven en el servidor de PyTorch, un directorio por version de
+# CUDA. `explicit = true` significa que SOLO los paquetes enrutados abajo salen
+# de ahi; todo lo demas sigue viniendo de PyPI.
+#
+# cu128 = CUDA 12.8, la primera linea que soporta la RTX 5070 (Blackwell,
+# compute capability sm_120). El marker lo mantiene Windows-only, de forma que
+# el mismo proyecto funciona sin cambios en Colab o Linux, donde el torch de
+# PyPI ya trae CUDA.
+# --------------------------------------------------------------------------- #
+[[tool.uv.index]]
+name = "pytorch-cuda"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cuda", marker = "sys_platform == 'win32'" }]

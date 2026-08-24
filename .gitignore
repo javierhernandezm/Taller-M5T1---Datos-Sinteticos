@@ -1,0 +1,20 @@
+# Entornos (uv los reconstruye desde uv.lock; nunca se versionan)
+.venv/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.ruff_cache/
+.env
+
+# Datos crudos del TFM: privados y grandes (115 MB). Se referencian por
+# TALLER_DATA_ROOT o se copian aquí localmente, pero no entran en el repo.
+data/raw/*
+!data/raw/.gitkeep
+
+# Parquet grandes por defecto; el meta de ventanas (244 KB) sí se versiona
+# porque los notebooks 02-04 lo necesitan.
+*.parquet
+!data/processed/windows_meta.parquet
+
+# Logs de ejecución por lotes
+notebooks/run_nb*.log
