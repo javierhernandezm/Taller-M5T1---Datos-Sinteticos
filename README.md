@@ -35,7 +35,7 @@ taller_b5t1/
 │   ├── 01_datos_y_eda.ipynb          # datos, preprocesamiento y EDA crítico
 │   ├── 02_downstream_baselines.ipynb # baselines + arquitectura downstream congelada
 │   ├── 03_generadores.ipynb          # generadores, curvas de convergencia y auditoría
-│   └── 04_malla_sintetica.ipynb      # malla real×sintético  (PENDIENTE DE EJECUTAR)
+│   └── 04_malla_sintetica.ipynb      # malla real×sintético y contraste de hipótesis
 ├── data/processed/            # artefactos generados (VERSIONADOS: 16 MB)
 │   ├── windows_dataset.npz           #   X/y de train, val y test (sin estandarizar)
 │   ├── windows_meta.parquet          #   cik, sector, fechas y split de cada ventana
@@ -191,6 +191,22 @@ personas no se pisen:
 | WGAN-GP | 5,10 | −0,012 | 0,81 |
 | **RealNVP** | **13,9** | **0,046** | **0,65** |
 
+**Malla real×sintético** (notebook 04; 117 celdas, Δ R² pareado por semilla):
+
+> Los datos sintéticos **sí** mejoran el modelo, pero solo por encima de un umbral mínimo
+> de datos reales (entre 250 y 1.000 ventanas) y solo si el generador reproduce las colas.
+> Por debajo de ese umbral, y con generadores que gaussianizan la distribución, el dato
+> sintético **destruye** el modelo. El generador más sofisticado (WGAN-GP) es el más
+> peligroso —deja el R² en negativo con N=250— y el más trivial (ruido sobre datos reales)
+> nunca hace daño.
+
+Y el hallazgo que cierra el círculo: el **discriminative AUC** medido en el notebook 03,
+sin mirar el modelo downstream, **ordena perfectamente** a los seis generadores por su
+ganancia real (Spearman −1,00 con N=1.000). Se puede elegir generador midiendo fidelidad,
+en minutos, en lugar de barrer una malla entera.
+
+---
+
 El flow es el mejor generador neuronal en los tres ejes, pero **sobreajusta**: su ventaja
 en log-verosimilitud sobre una N(0, I) trivial cae de **+24,0 nats en train** a **+4,3 en
 validación**, un 82 % menos. Sigue batiendo al listón fuera de muestra, pero por mucho
@@ -203,5 +219,5 @@ menos de lo que su ajuste sugiere. Parecerse a train no garantiza generalizar.
 | 01 · Datos, preprocesamiento y EDA crítico | ✅ |
 | 02 · Arquitectura downstream y baselines no generativos | ✅ |
 | 03 · Generadores (baselines simples + familias neuronales) | ✅ |
-| 04 · Malla real×sintético y análisis de resultados | código listo, **pendiente de ejecutar** |
+| 04 · Malla real×sintético y análisis de resultados | ✅ (malla REDUCIDA: 117 celdas) |
 | 05 · Presentación (PDF) | pendiente |

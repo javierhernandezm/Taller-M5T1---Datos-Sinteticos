@@ -251,3 +251,44 @@ def delta_vs_solo_real(resumen: pd.DataFrame) -> pd.DataFrame:
     out = resumen[resumen.generador != SOLO_REAL].merge(base, on="n_real")
     out["delta_r2"] = out["test_r2_media"] - out["r2_solo_real"]
     return out.sort_values(["n_real", "generador", "ratio"])
+
+
+def delta_pareado(df: pd.DataFrame) -> pd.DataFrame:
+    """Δ R² **pareado por semilla**, con su significancia.
+
+    Por qué pareado y no diferencia de medias: la semilla fija el submuestreo
+    de ventanas reales, así que comparar una celda contra la celda de solo-real
+    de *su misma semilla* elimina la varianza del submuestreo — que es la que
+    domina en régimen de escasez. Con N=250 la desviación entre semillas del
+    modelo solo-real es 0,063, once veces el umbral de ±0,006 que fijó el
+    notebook 02 con 102k ventanas: aplicar aquel umbral aquí declararía
+    significativa casi cualquier diferencia. El pareado resuelve eso.
+
+    Devuelve, por (n_real, generador, ratio): media del delta, su desviación,
+    el error estándar y el estadístico t = media / error estándar. Con solo 3
+    semillas se exige |t| >= 2,5 para hablar de efecto; por debajo, la celda
+    se declara no concluyente en lugar de inventar una conclusión.
+    """
+    base = (df[df.generador == SOLO_REAL]
+            .set_index(["n_real", "seed"])["test_r2"].rename("r2_base"))
+    d = df[df.generador != SOLO_REAL].join(base, on=["n_real", "seed"])
+    d = d.assign(delta=d.test_r2 - d.r2_base)
+
+    out = (d.groupby(["n_real", "generador", "ratio"])["delta"]
+             .agg(delta_medio="mean", delta_sd="std", n_seeds="count").reset_index())
+    out["ee"] = out.delta_sd / np.sqrt(out.n_seeds)
+    out["t"] = out.delta_medio / out.ee.replace(0, np.nan)
+    out["veredicto"] = np.where(out.t.abs() >= 2.5,
+                                np.where(out.delta_medio > 0, "mejora", "empeora"),
+                                "no concluyente")
+    return out
+
+
+def umbral_ruido_por_n(df: pd.DataFrame) -> pd.Series:
+    """Desviación entre semillas del modelo solo-real, por nivel de N.
+
+    Es el umbral de relevancia HONESTO en cada régimen de escasez, y sustituye
+    al ±0,006 del notebook 02, que solo vale para el modelo entrenado con las
+    102k ventanas completas.
+    """
+    return df[df.generador == SOLO_REAL].groupby("n_real")["test_r2"].std()
