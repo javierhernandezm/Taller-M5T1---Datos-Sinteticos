@@ -1,0 +1,652 @@
+<!doctype html>
+<title>Linaje B5-T1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root{
+    --bg:#f1f3f0;
+    --surface:#ffffff;
+    --surface-2:#e7ebe6;
+    --ink:#1c2321;
+    --muted:#5c6b66;
+    --border:#d7dcd6;
+    --accent:#c1622a;
+    --c-proc:#c1622a;
+    --c-data:#3d6b8a;
+    --c-fig:#4f8a72;
+    --c-code:#5a5a9e;
+    --proc-tint: rgba(193,98,42,.05);
+    --shadow: 0 1px 2px rgba(20,30,25,.07), 0 8px 20px -10px rgba(20,30,25,.18);
+    --font-serif: 'Iowan Old Style','Palatino Linotype','Book Antiqua', Georgia, serif;
+    --font-sans: -apple-system, BlinkMacSystemFont,'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: 'SF Mono','Cascadia Code', Consolas,'Roboto Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#14181a; --surface:#1b2123; --surface-2:#20282a; --ink:#e9ece9; --muted:#96a49f;
+      --border:#2d3638; --accent:#e2894f; --c-proc:#e2894f; --c-data:#82b4d8; --c-fig:#86c19d; --c-code:#a3a3e0;
+      --proc-tint: rgba(226,137,79,.09);
+      --shadow: 0 1px 2px rgba(0,0,0,.45), 0 12px 26px -12px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#14181a; --surface:#1b2123; --surface-2:#20282a; --ink:#e9ece9; --muted:#96a49f;
+    --border:#2d3638; --accent:#e2894f; --c-proc:#e2894f; --c-data:#82b4d8; --c-fig:#86c19d; --c-code:#a3a3e0;
+    --proc-tint: rgba(226,137,79,.09);
+    --shadow: 0 1px 2px rgba(0,0,0,.45), 0 12px 26px -12px rgba(0,0,0,.6);
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:var(--bg); color:var(--ink); font-family:var(--font-sans);
+    padding: 28px 32px 48px;
+  }
+  a{ color:inherit; }
+
+  .masthead{ max-width:900px; margin-bottom:22px; }
+  .eyebrow{
+    font-family:var(--font-mono); font-size:11px; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--muted); margin:0 0 8px;
+  }
+  h1{
+    font-family:var(--font-serif); font-weight:600; font-size:clamp(24px,3vw,32px);
+    margin:0 0 10px; text-wrap:balance; letter-spacing:.01em;
+  }
+  .masthead p{
+    font-size:14.5px; line-height:1.6; color:var(--muted); margin:0 0 6px; max-width:640px;
+  }
+  .masthead strong{ color:var(--ink); font-weight:600; }
+
+  .legend{
+    display:flex; flex-wrap:wrap; gap:18px 26px; align-items:center;
+    margin: 18px 0 20px; padding: 12px 16px; background:var(--surface);
+    border:1px solid var(--border); border-radius:10px; box-shadow:var(--shadow);
+    font-size:12.5px; color:var(--muted);
+  }
+  .legend-group{ display:flex; align-items:center; gap:14px; }
+  .legend-title{ font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin-right:2px; }
+  .swatch{ display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+  .dot{ width:9px; height:9px; border-radius:50%; flex:none; }
+  .lineseg{ width:22px; height:0; border-top:2px solid; flex:none; }
+  .lineseg.dashed{ border-top-style:dashed; }
+  .lineseg.borderdash{ width:0; height:14px; border-left:2px dashed; }
+
+  main{ display:flex; gap:18px; align-items:stretch; }
+  @media (max-width: 980px){ main{ flex-direction:column; } }
+
+  .canvas-wrap{
+    position:relative; flex:1 1 auto; min-width:0;
+    height:min(1020px, 82vh); overflow:auto;
+    background:var(--surface); border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow);
+  }
+  #canvas{
+    position:relative; width:2160px; height:1020px;
+    background-image: radial-gradient(var(--border) 1px, transparent 1px);
+    background-size: 26px 26px; background-position: -6px -6px;
+  }
+  .lane{ position:absolute; top:0; height:100%; background:var(--proc-tint); border-left:1px dashed var(--border); border-right:1px dashed var(--border); }
+
+  .colhead{
+    position:absolute; top:22px; font-family:var(--font-mono); font-size:11.5px;
+    color:var(--muted); letter-spacing:.02em; white-space:nowrap;
+  }
+  .colhead b{ color:var(--ink); font-weight:600; }
+
+  svg.edges{ position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
+  svg.edges path{ fill:none; stroke-width:1.6; opacity:.35; transition:opacity .15s, stroke-width .15s; }
+  svg.edges path.dashed{ stroke-dasharray:4 4; stroke-width:1.4; }
+  svg.edges path.lit{ opacity:1; stroke-width:2.4; }
+  svg.edges path.dim{ opacity:.08; }
+  svg.edges text{ font-family:var(--font-mono); font-size:10px; fill:var(--c-soft); opacity:0; transition:opacity .15s; }
+  svg.edges text.lit{ opacity:1; }
+
+  .node{
+    position:absolute; background:var(--surface); border:1px solid var(--border);
+    border-left:3px solid var(--c-data); border-radius:9px; box-shadow:var(--shadow);
+    padding:9px 11px; cursor:pointer; display:flex; flex-direction:column; justify-content:center; gap:3px;
+    transition:transform .12s ease, box-shadow .12s ease, opacity .15s ease, border-color .12s ease;
+    outline:none;
+  }
+  .node:focus-visible{ box-shadow:0 0 0 2px var(--accent), var(--shadow); }
+  .node.type-raw{ border-left:3px dashed var(--c-data); }
+  .node.type-proc{ border-left-color:var(--c-proc); background:var(--proc-tint); }
+  .node.type-fig{ border-left-color:var(--c-fig); }
+  .node.type-script{ border-left-color:var(--c-code); padding:7px 10px; gap:2px; }
+  .node.type-script .node-title{ font-size:11.5px; }
+  .node.type-script .node-stat{ font-size:9.5px; }
+  .node.lit{ transform:translateY(-2px); box-shadow:0 4px 8px rgba(20,30,25,.12), 0 16px 28px -14px rgba(20,30,25,.3); z-index:4; }
+  .node.dim{ opacity:.32; }
+  .node.selected{ border-color:var(--accent); }
+
+  .node-chip{
+    font-family:var(--font-mono); font-size:9px; text-transform:uppercase; letter-spacing:.07em;
+    color:var(--muted);
+  }
+  .node-title{ font-family:var(--font-mono); font-size:12.5px; font-weight:600; line-height:1.25; color:var(--ink); }
+  .node.type-proc .node-title{ font-size:13.5px; }
+  .node-stat{ font-family:var(--font-mono); font-size:10.5px; color:var(--muted); line-height:1.2; }
+
+  aside{
+    flex:0 0 330px; overflow-y:auto;
+    background:var(--surface); border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow);
+    padding:20px 20px 28px;
+  }
+  @media (max-width: 980px){ aside{ flex:1 1 auto; height:auto; max-height:420px; } }
+
+  .detail-type{ font-family:var(--font-mono); font-size:11px; text-transform:uppercase; letter-spacing:.08em; font-weight:600; margin-bottom:8px; }
+  .detail-title{ font-family:var(--font-mono); font-size:16px; font-weight:700; margin:0 0 3px; color:var(--ink); word-break:break-word; }
+  .detail-sub{ font-family:var(--font-mono); font-size:11px; color:var(--muted); margin-bottom:14px; }
+  .detail-que{ font-size:13.5px; line-height:1.6; color:var(--ink); margin:0 0 14px; }
+  .stat-table{ width:100%; border-collapse:collapse; margin-bottom:14px; }
+  .stat-table tr{ border-top:1px solid var(--border); }
+  .stat-table tr:first-child{ border-top:none; }
+  .stat-table td{ padding:6px 0; font-size:12px; vertical-align:top; }
+  .stat-table td:first-child{ color:var(--muted); padding-right:10px; white-space:nowrap; }
+  .stat-table td:last-child{ font-family:var(--font-mono); font-weight:600; text-align:right; font-variant-numeric:tabular-nums; color:var(--ink); }
+  .pill-list{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+  .pill{ font-family:var(--font-mono); font-size:10.5px; background:var(--surface-2); border:1px solid var(--border); border-radius:6px; padding:3px 7px; color:var(--muted); }
+  .callout{ font-size:12.5px; line-height:1.55; color:var(--ink); background:var(--surface-2); border-left:3px solid var(--accent); border-radius:0 6px 6px 0; padding:10px 12px; margin-bottom:6px; }
+  .conn-title{ font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:16px 0 6px; }
+  .conn-btn{
+    display:block; width:100%; text-align:left; font-family:var(--font-mono); font-size:11.5px;
+    background:none; border:none; border-top:1px solid var(--border); padding:6px 0; color:var(--ink);
+    cursor:pointer;
+  }
+  .conn-btn:hover{ color:var(--accent); }
+  .conn-btn .arrow{ color:var(--muted); margin-right:6px; }
+
+  .intro h3{ font-family:var(--font-serif); font-size:19px; margin:0 0 10px; }
+  .intro p{ font-size:13.5px; line-height:1.65; color:var(--ink); margin:0 0 12px; }
+  .intro .hint{ font-size:12px; color:var(--muted); font-style:italic; }
+
+  footer{ max-width:900px; margin-top:20px; font-size:12px; color:var(--muted); line-height:1.6; }
+  footer code{ font-family:var(--font-mono); background:var(--surface-2); padding:1px 5px; border-radius:4px; }
+
+  @media (prefers-reduced-motion: reduce){
+    .node, svg.edges path, svg.edges text{ transition:none !important; }
+  }
+</style>
+
+<div class="masthead">
+  <p class="eyebrow">Taller B5-T1 · MIAX 14 — Módulo 5, IA Generativa</p>
+  <h1>Linaje de datos del taller: de los precios crudos a la malla real×sintético</h1>
+  <p>Los cuatro notebooks forman una cadena estricta: cada uno solo puede tocar lo que el
+  anterior dejó escrito en <strong>data/processed/</strong> — y cada uno importa su propia
+  lógica desde <strong>src/</strong>. Este mapa traza ambas cadenas: qué dato entra y sale,
+  y qué código alimenta cada paso. Pasa el ratón o toca cualquier nodo para ver su detalle.</p>
+</div>
+
+<div class="legend">
+  <div class="legend-group">
+    <span class="legend-title">Nodo</span>
+    <span class="swatch"><span class="dot" style="background:var(--c-data)"></span>dato (crudo o procesado)</span>
+    <span class="swatch"><span class="dot" style="background:var(--c-code)"></span>script de src/</span>
+    <span class="swatch"><span class="dot" style="background:var(--c-proc)"></span>notebook</span>
+    <span class="swatch"><span class="dot" style="background:var(--c-fig)"></span>figuras</span>
+  </div>
+  <div class="legend-group">
+    <span class="legend-title">Borde</span>
+    <span class="swatch"><span class="lineseg borderdash" style="border-color:var(--c-data)"></span>fuera del repo</span>
+  </div>
+  <div class="legend-group">
+    <span class="legend-title">Flecha</span>
+    <span class="swatch"><span class="lineseg" style="border-color:var(--c-data)"></span>fichero / import producido o consumido</span>
+    <span class="swatch"><span class="lineseg dashed" style="border-color:var(--c-proc)"></span>sin fichero — copiado a mano</span>
+  </div>
+</div>
+
+<main>
+  <div class="canvas-wrap" id="canvasWrap">
+    <div id="canvas">
+      <svg class="edges" id="edgesSvg"></svg>
+    </div>
+  </div>
+  <aside id="detailPanel"></aside>
+</main>
+
+<footer>
+  Generado a partir de los notebooks y de <code>data/processed/</code> /
+  <code>reports/figures/</code> tal y como están en el repo. Las cifras de cada nodo son
+  las que quedaron impresas en la última ejecución registrada de cada notebook.
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  var COLX = [40, 320, 620, 940, 1240, 1560, 1860];
+  var PROC = { w:220, h:100 };
+  var DATA = { w:202, h:74 };
+  var SCRIPT = { w:186, h:58 };
+
+  var COLHEADS = [
+    {col:0, text:"0 · datos crudos"},
+    {col:1, text:"1 · notebook 01"},
+    {col:2, text:"↳ artefactos de 01"},
+    {col:3, text:"2 · notebooks 02 / 03"},
+    {col:4, text:"↳ artefactos de 02 / 03"},
+    {col:5, text:"3 · notebook 04"},
+    {col:6, text:"↳ resultados finales"}
+  ];
+
+  var NODES = [
+    { id:"n1", col:0, y:220, type:"raw", title:"sp1500_daily_prices.parquet",
+      sub:"PRECIOS/ · fuera del repo", stat:"7.296.284 filas",
+      detail:{
+        que:"Precio de cierre ajustado por splits (no total return) y volumen, una fila por (cik, fecha). Vive fuera del repo — Drive del TFM o data/raw/ local — y solo lo toca el notebook 01.",
+        stats:[["filas totales","7.296.284"],["columnas usadas","close, volume, date"],["rango temporal","2012 → 2026"]],
+        nota:"Sin dividendos: válido para volatilidad, no reutilizable para retornos totales." } },
+
+    { id:"n2", col:0, y:420, type:"raw", title:"universo_pit_rics_2400.csv",
+      sub:"MAESTRO/ · fuera del repo", stat:"2.519 tramos",
+      detail:{
+        que:"Universo point-in-time del S&P 1500: cada fila es un tramo de pertenencia de un activo al índice, auditado contra tres fuentes (Norgate → SEC/CIK → RIC de precios).",
+        stats:[["tramos totales","2.519"],["tras READY + OK","1.498 (1.494 activos)"],["delisted retenidos","30,2 %"]],
+        nota:"El filtro de mapeo perfecto no introduce sesgo de supervivencia: los delisted se retienen hasta su salida real." } },
+
+    { id:"s_config", col:1, y:20, type:"script", title:"config.py",
+      sub:"src/ · importado por los 4 notebooks", stat:"Config · set_global_seed",
+      detail:{
+        que:"Único punto de verdad para rutas, parámetros del experimento (ventana, horizonte, splits, semilla) y localización de datos. find_data_root() autodetecta repo / Drive / Colab, así que cambiar un parámetro nunca toca más de un fichero.",
+        list:["Config","set_global_seed","find_data_root"] } },
+
+    { id:"s_dataload", col:1, y:90, type:"script", title:"data_loading.py",
+      sub:"src/ · importado por 01_datos_y_eda", stat:"load_universe · load_prices",
+      detail:{
+        que:"Convierte los ficheros crudos del TFM en un panel de precios limpio y point-in-time, restringido al universo perfectamente mapeado. Responsabilidad única: ninguna transformación estadística vive aquí.",
+        list:["load_universe","load_prices"] } },
+
+    { id:"s_preproc", col:1, y:160, type:"script", title:"preprocessing.py",
+      sub:"src/ · importado por 01_datos_y_eda", stat:"returns · ventanas · split",
+      detail:{
+        que:"La cadena completa del panel limpio al dataset supervisado: retornos log con control de huecos, ventanas X (60 retornos) + target y (ln σ_fwd), partición temporal con purga y embargo, y el estandarizador ajustado solo con train.",
+        list:["compute_returns","build_windows","temporal_split","Standardizer"] } },
+
+    { id:"s_eda", col:1, y:230, type:"script", title:"eda.py",
+      sub:"src/ · importado por los 4 notebooks", stat:"8 plot_* · PALETTE · _style",
+      detail:{
+        que:"Una función por figura del EDA crítico (cobertura, colas, clustering, apalancamiento, target, regímenes, sector, ventanas), más la paleta y el estilo de matplotlib que comparten los cuatro notebooks para que todas las figuras se lean como una sola familia visual.",
+        list:["plot_coverage","plot_fat_tails","plot_vol_clustering","plot_leverage","plot_target_distribution","plot_vol_regimes","plot_sector_vol","plot_sample_windows","PALETTE"] } },
+
+    { id:"n3", col:1, y:300, type:"proc", title:"01_datos_y_eda.ipynb",
+      sub:"usa config · data_loading · preprocessing · eda", stat:"153.108 ventanas → split",
+      detail:{
+        que:"Fija todo lo que ocurre antes de cualquier modelo: filtra el universo, recorta precios point-in-time, calcula retornos log, construye ventanas (60 retornos → σ realizada a 21 días) y particiona en train/val/test con purga y embargo de 21 días. Los 8 gráficos de EDA auditan colas, clustering, apalancamiento y distribution shift.",
+        stats:[["precios tras filtro","3.319.925 filas"],["ventanas totales","153.108 (1.482 activos)"],["train / val / test","102.406 / 17.146 / 24.613"],["purgadas (fuga)","8.943"]],
+        nota:"Contrato de datos para los notebooks siguientes: nada de lo que sale de aquí se recalcula después." } },
+
+    { id:"n4", col:2, y:120, type:"data", title:"windows_dataset.npz",
+      sub:"data/processed/ · 12,5 MB", stat:"X (·,60) · y (·,) sin estandarizar",
+      detail:{
+        que:"Arrays de train/val/test SIN estandarizar — la estandarización se aplica en tiempo de entrenamiento con los estadísticos congelados de train, para que ninguna variante del experimento la recalcule por accidente sobre otra partición.",
+        stats:[["X_train","(102.406, 60)"],["X_val","(17.146, 60)"],["X_test","(24.613, 60)"]] } },
+
+    { id:"n5", col:2, y:250, type:"data", title:"windows_meta.parquet",
+      sub:"data/processed/ · 249 KB", stat:"cik, fecha, sector, split",
+      detail:{
+        que:"Metadatos por ventana (activo, fecha, sector, partición). El notebook 04 lo usa para submuestrear por fechas — no por filas — al simular escasez de datos reales, evitando inflar el N efectivo.",
+        stats:[["filas","153.108"],["columnas clave","cik, date_t, split, sector"]] } },
+
+    { id:"n6", col:2, y:380, type:"data", title:"standardizer.json",
+      sub:"data/processed/ · 126 B", stat:"x_μ, x_σ, y_μ, y_σ (solo train)",
+      detail:{
+        que:"Los cuatro estadísticos con los que se estandarizan entradas y target en todos los notebooks siguientes — calculados exclusivamente sobre train, nunca recalculados.",
+        stats:[["x_mu","0,000389"],["x_sd","0,022"],["y_mu","−1,367"],["y_sd","0,526"]] } },
+
+    { id:"n7", col:2, y:510, type:"fig", title:"8 figuras EDA",
+      sub:"reports/figures/ · 01–08", stat:"cobertura · colas · clustering…",
+      detail:{
+        que:"El EDA crítico: cobertura del panel, colas gruesas vs. gaussiana, clustering de volatilidad, apalancamiento, distribución del target, regímenes, sector, ventanas de muestra.",
+        list:["01_cobertura.png","02_colas.png","03_clustering.png","04_leverage.png","05_target.png","06_regimenes.png","07_sector.png","08_ventanas.png"] } },
+
+    { id:"s_baselines", col:3, y:20, type:"script", title:"baselines.py",
+      sub:"src/ · importado por 02_downstream_baselines", stat:"media global · persistencia · HAR-RV",
+      detail:{
+        que:"Los tres predictores no generativos que fijan el suelo del experimento: media global, persistencia de la RV-21 y HAR-RV (OLS) — cualquier red tiene que justificarse frente a ellos.",
+        list:["predict_global_mean","predict_persistence","HarOLS","regression_metrics"] } },
+
+    { id:"s_models", col:3, y:90, type:"script", title:"models.py",
+      sub:"src/ · importado por 02_downstream_baselines", stat:"MLP · ConvNet1D · build_model",
+      detail:{
+        que:"Las cuatro arquitecturas candidatas (MLP y CNN 1-D, chicas y grandes) para el modelo downstream. build_model(nombre, **kwargs) las reconstruye por nombre — así la arquitectura congelada se puede recrear siempre igual desde el json de referencia.",
+        list:["MLP","ConvNet1D","build_model","count_params"] } },
+
+    { id:"n8", col:3, y:180, type:"proc", title:"02_downstream_baselines.ipynb",
+      sub:"usa baselines · models · training · eda", stat:"campeona cnn_l · R² test 0,456",
+      detail:{
+        que:"Fija el suelo (3 baselines sin redes) y la arquitectura downstream que queda congelada para el resto del taller. 4 candidatas (MLP/CNN chicas y grandes), elegida por MSE en validación real, reentrenada con 3 semillas para medir ruido de optimización.",
+        stats:[["HAR-RV (suelo) test R²","0,359"],["campeona","cnn_l — 68.225 params"],["test R² (3 semillas)","0,456 ± 0,006"],["umbral de ruido","±0,006"]] } },
+
+    { id:"s_training", col:3, y:345, type:"script", title:"training.py",
+      sub:"src/ · importado por 02, 03 y 04", stat:"train_model · get_device",
+      detail:{
+        que:"El harness de entrenamiento único que usan la búsqueda de arquitectura (02) y las cientos de celdas de la malla (04): mismos hiperparámetros y mismo bucle, para que cualquier diferencia entre celdas sea atribuible a los datos, nunca al procedimiento.",
+        list:["train_model","predict","get_device","TrainResult"] } },
+
+    { id:"n9", col:3, y:460, type:"proc", title:"03_generadores.ipynb",
+      sub:"usa generators · gen_audit · training · eda", stat:"6 generadores, auditados",
+      detail:{
+        que:"Entrena y audita 6 generadores de la distribución conjunta [X | y] sobre las 102.406 ventanas de train: jitter, gaussiana, block bootstrap, VAE, WGAN-GP y RealNVP. No persiste ningún fichero de datos — las muestras se recrean dentro del notebook 04.",
+        stats:[["RealNVP — AUC discrim.","0,65 (mejor red)"],["gaussiana — AUC discrim.","0,96 (peor)"],["coste (CPU)","VAE 6 min · WGAN 22 min · flow 31 min"]],
+        nota:"Los generadores se reajustan desde cero en cada celda de la malla del 04 — este notebook solo audita, no aporta pesos reutilizables." } },
+
+    { id:"s_generators", col:3, y:590, type:"script", title:"generators.py",
+      sub:"src/ · importado por 03_generadores", stat:"6 clases · fit() / sample()",
+      detail:{
+        que:"Los seis generadores de ventanas sintéticas [X | y], todos con la misma interfaz fit()/sample() para que el notebook 04 pueda barrer la malla sin condicionales por modelo.",
+        list:["JitterGenerator","GaussianGenerator","BlockBootstrapGenerator","VAEGenerator","WGANGPGenerator","RealNVPGenerator"] } },
+
+    { id:"s_gen_audit", col:3, y:660, type:"script", title:"gen_audit.py",
+      sub:"src/ · importado por 03_generadores", stat:"discriminative_auc · curtosis · ACF",
+      detail:{
+        que:"Audita cada generador contra los hechos estilizados (curtosis, ACF de |r|, apalancamiento) y calcula el discriminative AUC: ¿puede un clasificador distinguir lo sintético de lo real?",
+        list:["discriminative_score","audit_generator"] } },
+
+    { id:"n10", col:4, y:60, type:"data", title:"downstream_reference.json",
+      sub:"data/processed/ · 1,5 KB", stat:"arquitectura + métricas congeladas",
+      detail:{
+        que:"La arquitectura campeona (cnn, channels=[32,64,128], fc=128), sus hiperparámetros de entrenamiento y las métricas de las 3 semillas — el contrato que el notebook 04 ya no puede tocar.",
+        stats:[["arch","cnn · [32,64,128] · fc128"],["test_r2 medio","0,456"],["semilla guardada","44"]] } },
+
+    { id:"n11", col:4, y:180, type:"data", title:"downstream_reference.pt",
+      sub:"data/processed/ · 277 KB", stat:"pesos de la semilla 44",
+      detail:{
+        que:"Pesos entrenados de la arquitectura campeona (semilla mediana en validación). Se guarda como referencia, pero el notebook 04 reentrena desde cero en cada celda de la malla — no los reutiliza." } },
+
+    { id:"n12", col:4, y:300, type:"fig", title:"2 figuras",
+      sub:"reports/figures/ · 09–10", stat:"convergencia · pred vs real",
+      detail:{
+        que:"Curvas de loss de las 4 arquitecturas candidatas (evidencia numérica de convergencia) y el hexbin predicción-vs-realidad de la campeona en test.",
+        list:["09_convergencia_candidatas.png","10_pred_vs_real.png"] } },
+
+    { id:"n13", col:4, y:460, type:"fig", title:"3 figuras",
+      sub:"reports/figures/ · 11–13", stat:"convergencia · marginales · ventanas",
+      detail:{
+        que:"Curvas de convergencia de VAE / WGAN-GP / RealNVP, marginales real-vs-sintético en escala log (el test de las colas) y ventanas sintéticas de muestra por generador.",
+        list:["11_convergencia_generadores.png","12_marginales_generadores.png","13_ventanas_sinteticas.png"] } },
+
+    { id:"s_malla", col:5, y:210, type:"script", title:"malla.py",
+      sub:"src/ · importado por 04_malla_sintetica", stat:"plan_de_malla · ejecutar_malla",
+      detail:{
+        que:"El barrido experimental completo: arma el plan de celdas (N_real × ratio × generador × semilla), las ejecuta con checkpointing en CSV (relanzar reanuda donde se quedó) y calcula el delta pareado frente a solo-real.",
+        list:["plan_de_malla","ejecutar_malla","resumir","delta_vs_solo_real","delta_pareado","umbral_ruido_por_n"] } },
+
+    { id:"n14", col:5, y:300, type:"proc", title:"04_malla_sintetica.ipynb",
+      sub:"usa malla · training · eda", stat:"117 celdas · malla REDUCIDA",
+      detail:{
+        que:"La pregunta del taller. Por cada (N_real, generador, ratio, semilla): submuestrea N_real ventanas reales por fecha, reentrena el generador SOLO con esas, genera ratio×N_real ventanas sintéticas, entrena la arquitectura congelada sobre la mezcla y evalúa en el test real intocado.",
+        stats:[["malla REDUCIDA","3 N × 3 ratios × 6 generadores × 3 semillas"],["celdas","117 (2,8 min en RTX 5070)"],["N reales probados","250 · 1.000 · 3.000"]],
+        nota:"Hallazgo central: por debajo de ~1.000 ventanas reales el sintético no ayuda (y a menudo empeora); el RealNVP es el único generador que mejora de forma consistente por encima de ese umbral, y la gaussiana empeora siempre." } },
+
+    { id:"n15", col:6, y:120, type:"data", title:"malla_reducida.csv",
+      sub:"data/processed/ · 13 KB", stat:"117 filas — una por celda",
+      detail:{
+        que:"Resultado crudo de cada celda de la malla: n_real, generador, ratio, semilla, val_mse, test_r2, época del mejor peso, segundos de entrenamiento.",
+        stats:[["filas","117"],["se reanuda solo","sí — cada celda se escribe al terminar"]] } },
+
+    { id:"n16", col:6, y:250, type:"data", title:"malla_reducida_resumen.csv",
+      sub:"data/processed/ · 3 KB", stat:"media / sd de R² entre semillas",
+      detail:{
+        que:"Agregado por (n_real, generador, ratio): media y desviación de test_r2 entre las 3 semillas — la tabla que alimenta la curva de aprendizaje." } },
+
+    { id:"n17", col:6, y:380, type:"data", title:"malla_reducida_delta.csv",
+      sub:"data/processed/ · 4 KB", stat:"Δ R² pareado + veredicto",
+      detail:{
+        que:"Comparación pareada por semilla contra la celda de solo-real (misma semilla): cancela la varianza del submuestreo y deja solo el efecto del dato sintético. Exige |t| ≥ 2,5 para hablar de efecto.",
+        stats:[["celdas agregadas","36"],["mejoran","5"],["empeoran","11"],["no concluyentes","20"]] } },
+
+    { id:"n18", col:6, y:510, type:"fig", title:"2 figuras",
+      sub:"reports/figures/ · 14–15", stat:"Δ R² por escasez · curva de aprendizaje",
+      detail:{
+        que:"La figura central del taller: ganancia frente a proporción de sintéticos, un panel por nivel de escasez; y la curva de aprendizaje R² vs. ventanas reales disponibles, con el techo de 102k reales.",
+        list:["14_delta_r2_por_escasez.png","15_curva_aprendizaje.png"] } }
+  ];
+
+  var EDGES = [
+    // datos crudos -> notebook 01
+    { from:"n1", to:"n3" }, { from:"n2", to:"n3" },
+    // código -> notebook 01 (local, misma columna)
+    { from:"s_config", to:"n3", vertical:true },
+    { from:"s_dataload", to:"n3", vertical:true },
+    { from:"s_preproc", to:"n3", vertical:true },
+    { from:"s_eda", to:"n3", vertical:true },
+    // notebook 01 -> sus artefactos
+    { from:"n3", to:"n4" }, { from:"n3", to:"n5" }, { from:"n3", to:"n6" }, { from:"n3", to:"n7" },
+    // artefactos de 01 -> notebooks 02 / 03
+    { from:"n4", to:"n8" }, { from:"n6", to:"n8" },
+    { from:"n4", to:"n9" }, { from:"n6", to:"n9" },
+    // código -> notebook 02 (local)
+    { from:"s_baselines", to:"n8", vertical:true },
+    { from:"s_models", to:"n8", vertical:true },
+    { from:"s_training", to:"n8", vertical:true },
+    // código -> notebook 03 (local)
+    { from:"s_training", to:"n9", vertical:true },
+    { from:"s_generators", to:"n9", vertical:true },
+    { from:"s_gen_audit", to:"n9", vertical:true },
+    // notebook 02 -> sus artefactos
+    { from:"n8", to:"n10" }, { from:"n8", to:"n11" }, { from:"n8", to:"n12" },
+    // notebook 03 -> sus artefactos
+    { from:"n9", to:"n13" },
+    // código compartido (config.py, eda.py) -> los notebooks 02 / 03, saltando columnas
+    { from:"s_config", to:"n8", bus:760 },
+    { from:"s_config", to:"n9", bus:780 },
+    { from:"s_eda", to:"n8", bus:820 },
+    { from:"s_eda", to:"n9", bus:840 },
+    // notebook 04: entradas
+    { from:"n10", to:"n14" },
+    { from:"s_malla", to:"n14", vertical:true },
+    { from:"s_config", to:"n14", bus:800 },
+    { from:"s_eda", to:"n14", bus:860 },
+    { from:"s_training", to:"n14", bus:880 },
+    { from:"n4", to:"n14", bus:900 },
+    { from:"n5", to:"n14", bus:920 },
+    { from:"n6", to:"n14", bus:940 },
+    { from:"n9", to:"n14", bus:960, dashed:true, label:"sin fichero — cifras copiadas a mano" },
+    // notebook 04 -> resultados finales
+    { from:"n14", to:"n15" }, { from:"n14", to:"n16" }, { from:"n14", to:"n17" }, { from:"n14", to:"n18" }
+  ];
+
+  var byId = {};
+  NODES.forEach(function(n){ byId[n.id] = n; });
+
+  function rect(n){
+    var d = n.type === "proc" ? PROC : (n.type === "script" ? SCRIPT : DATA);
+    return { x:COLX[n.col], y:n.y, w:d.w, h:d.h };
+  }
+  function anchorRight(n){ var r = rect(n); return { x:r.x + r.w, y:r.y + r.h/2 }; }
+  function anchorLeft(n){ var r = rect(n); return { x:r.x, y:r.y + r.h/2 }; }
+  function anchorTop(n){ var r = rect(n); return { x:r.x + r.w/2, y:r.y }; }
+  function anchorBottom(n){ var r = rect(n); return { x:r.x + r.w/2, y:r.y + r.h }; }
+  function typeColorVar(t){
+    return { proc:"var(--c-proc)", fig:"var(--c-fig)", script:"var(--c-code)" }[t] || "var(--c-data)";
+  }
+  function typeLabel(t){ return { raw:"crudo · fuera del repo", data:"dato", fig:"figuras", proc:"notebook", script:"script · src/" }[t]; }
+
+  var canvas = document.getElementById("canvas");
+  var svg = document.getElementById("edgesSvg");
+
+  // faint swimlanes behind the three "notebook" columns
+  [1,3,5].forEach(function(c){
+    var lane = document.createElement("div");
+    lane.className = "lane";
+    lane.style.left = (COLX[c] - 26) + "px";
+    lane.style.width = (PROC.w + 52) + "px";
+    canvas.appendChild(lane);
+  });
+
+  // column headers
+  COLHEADS.forEach(function(h){
+    var el = document.createElement("div");
+    el.className = "colhead";
+    el.style.left = COLX[h.col] + "px";
+    el.innerHTML = h.text.replace(/^(\d) ·/, "<b>$1</b> ·");
+    canvas.appendChild(el);
+  });
+
+  // nodes
+  NODES.forEach(function(n){
+    var r = rect(n);
+    var el = document.createElement("div");
+    el.className = "node type-" + n.type;
+    el.id = "node-" + n.id;
+    el.style.left = r.x + "px"; el.style.top = r.y + "px";
+    el.style.width = r.w + "px"; el.style.height = r.h + "px";
+    el.tabIndex = 0; el.setAttribute("role", "button");
+    el.innerHTML =
+      '<div class="node-chip" style="color:' + typeColorVar(n.type) + '">' + typeLabel(n.type) + "</div>" +
+      '<div class="node-title">' + n.title + "</div>" +
+      '<div class="node-stat">' + n.stat + "</div>";
+    el.addEventListener("mouseenter", function(){ preview(n.id); });
+    el.addEventListener("mouseleave", function(){ preview(null); });
+    el.addEventListener("focus", function(){ preview(n.id); });
+    el.addEventListener("blur", function(){ preview(null); });
+    el.addEventListener("click", function(){ select(n.id); });
+    el.addEventListener("keydown", function(e){
+      if (e.key === "Enter" || e.key === " "){ e.preventDefault(); select(n.id); }
+    });
+    canvas.appendChild(el);
+  });
+
+  // adjacency
+  var adj = {};
+  NODES.forEach(function(n){ adj[n.id] = { out:[], "in":[] }; });
+  EDGES.forEach(function(e, i){
+    e.id = "e" + i;
+    adj[e.from].out.push(e.to);
+    adj[e.to]["in"].push(e.from);
+  });
+
+  // edges (svg)
+  var svgns = "http://www.w3.org/2000/svg";
+  EDGES.forEach(function(e){
+    var a = byId[e.from], b = byId[e.to];
+    var p0, p3, d, midX, midY;
+
+    if (e.vertical){
+      // dependencia de código local: misma columna, conecta el borde
+      // superior/inferior que de verdad quedan enfrentados entre las dos tarjetas.
+      var ra = rect(a), rb = rect(b);
+      var aAboveB = ra.y < rb.y;
+      p0 = aAboveB ? anchorBottom(a) : anchorTop(a);
+      p3 = aAboveB ? anchorTop(b) : anchorBottom(b);
+      var dy = (p3.y - p0.y) * 0.5;
+      d = "M " + p0.x + "," + p0.y + " C " + p0.x + "," + (p0.y+dy) + " " + p3.x + "," + (p3.y-dy) + " " + p3.x + "," + p3.y;
+      midX = (p0.x + p3.x) / 2; midY = (p0.y + p3.y) / 2;
+    } else {
+      p0 = anchorRight(a); p3 = anchorLeft(b);
+      if (e.bus){
+        d = "M " + p0.x + "," + p0.y + " C " + (p0.x+140) + "," + e.bus + " " + (p3.x-140) + "," + e.bus + " " + p3.x + "," + p3.y;
+        midX = (p0.x + p3.x) / 2; midY = e.bus;
+      } else {
+        var dx = Math.max(40, (p3.x - p0.x) * 0.5);
+        d = "M " + p0.x + "," + p0.y + " C " + (p0.x+dx) + "," + p0.y + " " + (p3.x-dx) + "," + p3.y + " " + p3.x + "," + p3.y;
+        midX = (p0.x + p3.x) / 2; midY = (p0.y + p3.y) / 2;
+      }
+    }
+
+    var path = document.createElementNS(svgns, "path");
+    path.setAttribute("d", d);
+    path.setAttribute("id", "path-" + e.id);
+    path.setAttribute("style", "stroke:" + typeColorVar(a.type));
+    if (e.dashed) path.classList.add("dashed");
+    svg.appendChild(path);
+
+    if (e.label){
+      var text = document.createElementNS(svgns, "text");
+      text.setAttribute("x", midX); text.setAttribute("y", midY - 8);
+      text.setAttribute("text-anchor", "middle");
+      text.setAttribute("id", "label-" + e.id);
+      text.textContent = e.label;
+      svg.appendChild(text);
+    }
+  });
+  svg.setAttribute("viewBox", "0 0 2160 1020");
+
+  // hover / selection state
+  var selectedId = null, previewId = null;
+
+  function currentId(){ return selectedId || previewId; }
+
+  function applyHighlight(){
+    var id = currentId();
+    var active = id ? [id].concat(adj[id].out, adj[id]["in"]) : null;
+
+    NODES.forEach(function(n){
+      var el = document.getElementById("node-" + n.id);
+      el.classList.toggle("selected", n.id === selectedId);
+      if (!active){ el.classList.remove("lit", "dim"); return; }
+      el.classList.toggle("lit", active.indexOf(n.id) !== -1);
+      el.classList.toggle("dim", active.indexOf(n.id) === -1);
+    });
+    EDGES.forEach(function(e){
+      var p = document.getElementById("path-" + e.id);
+      var t = document.getElementById("label-" + e.id);
+      var lit = !!id && (e.from === id || e.to === id);
+      p.classList.toggle("lit", lit);
+      p.classList.toggle("dim", !!id && !lit);
+      if (t){ t.classList.toggle("lit", lit); }
+    });
+  }
+
+  function preview(id){ previewId = id; applyHighlight(); if (!selectedId) renderDetail(id); }
+  function select(id){ selectedId = (selectedId === id) ? null : id; applyHighlight(); renderDetail(selectedId || previewId); }
+
+  var panel = document.getElementById("detailPanel");
+
+  function renderDetail(id){
+    if (!id){ renderIntro(); return; }
+    var n = byId[id], d = n.detail || {};
+    var html = "";
+    html += '<div class="detail-type" style="color:' + typeColorVar(n.type) + '">' + typeLabel(n.type) + "</div>";
+    html += '<div class="detail-title">' + n.title + "</div>";
+    html += '<div class="detail-sub">' + n.sub + "</div>";
+    if (d.que) html += "<p class=\"detail-que\">" + d.que + "</p>";
+    if (d.stats && d.stats.length){
+      html += '<table class="stat-table">';
+      d.stats.forEach(function(row){ html += "<tr><td>" + row[0] + "</td><td>" + row[1] + "</td></tr>"; });
+      html += "</table>";
+    }
+    if (d.list && d.list.length){
+      html += '<div class="pill-list">';
+      d.list.forEach(function(f){ html += '<span class="pill">' + f + "</span>"; });
+      html += "</div>";
+    }
+    if (d.nota) html += '<div class="callout">' + d.nota + "</div>";
+
+    var ins = adj[id]["in"], outs = adj[id].out;
+    if (ins.length){
+      html += '<div class="conn-title">se alimenta de</div>';
+      ins.forEach(function(pid){ html += connBtn(pid, "←"); });
+    }
+    if (outs.length){
+      html += '<div class="conn-title">alimenta a</div>';
+      outs.forEach(function(cid){ html += connBtn(cid, "→"); });
+    }
+    panel.innerHTML = html;
+    Array.prototype.forEach.call(panel.querySelectorAll(".conn-btn"), function(btn){
+      btn.addEventListener("click", function(){ select(btn.getAttribute("data-id")); document.getElementById("node-" + btn.getAttribute("data-id")).scrollIntoView({behavior:"smooth", inline:"center", block:"nearest"}); });
+    });
+  }
+
+  function connBtn(id, arrow){
+    var n = byId[id];
+    return '<button class="conn-btn" data-id="' + id + '"><span class="arrow">' + arrow + "</span>" + n.title + "</button>";
+  }
+
+  function renderIntro(){
+    panel.innerHTML =
+      '<div class="intro">' +
+      "<h3>El hallazgo del taller</h3>" +
+      "<p>Los datos sintéticos <strong>sí</strong> mejoran el modelo downstream, pero solo por " +
+      "encima de un umbral mínimo de datos reales (entre 250 y 1.000 ventanas) y solo si el " +
+      "generador reproduce las colas. Por debajo de ese umbral —o con un generador que " +
+      "gaussianiza la distribución— el dato sintético <strong>empeora</strong> el modelo. " +
+      "El generador más sofisticado (WGAN-GP) es el más peligroso con pocos datos; el más " +
+      "trivial (jitter, ruido sobre datos reales) nunca hace daño.</p>" +
+      '<p class="hint">Toca cualquier nodo del grafo para ver de dónde viene y a dónde va.</p>' +
+      "</div>";
+  }
+
+  renderIntro();
+})();
+</script>
