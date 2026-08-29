@@ -312,7 +312,7 @@
         list:["MLP","ConvNet1D","build_model","count_params"] } },
 
     { id:"n8", col:3, y:180, type:"proc", title:"02_downstream_baselines.ipynb",
-      sub:"usa baselines · models · training · eda", stat:"campeona cnn_l · R² test 0,456",
+      sub:"usa baselines · models · training · eda · netviz", stat:"campeona cnn_l · R² test 0,456",
       detail:{
         que:"Fija el suelo (3 baselines sin redes) y la arquitectura downstream que queda congelada para el resto del taller. 4 candidatas (MLP/CNN chicas y grandes), elegida por MSE en validación real, reentrenada con 3 semillas para medir ruido de optimización.",
         stats:[["HAR-RV (suelo) test R²","0,359"],["campeona","cnn_l — 68.225 params"],["test R² (3 semillas)","0,456 ± 0,006"],["umbral de ruido","±0,006"]] } },
@@ -323,20 +323,27 @@
         que:"El harness de entrenamiento único que usan la búsqueda de arquitectura (02) y las cientos de celdas de la malla (04): mismos hiperparámetros y mismo bucle, para que cualquier diferencia entre celdas sea atribuible a los datos, nunca al procedimiento.",
         list:["train_model","predict","get_device","TrainResult"] } },
 
-    { id:"n9", col:3, y:460, type:"proc", title:"03_generadores.ipynb",
-      sub:"usa generators · gen_audit · training · eda", stat:"6 generadores, auditados",
+    { id:"s_netviz", col:3, y:425, type:"script", title:"netviz.py",
+      sub:"src/ · importado por 02_downstream_baselines y 03_generadores", stat:"8 diagramas · PlotNeuralNet (TikZ)",
+      detail:{
+        que:"Genera las fichas visuales de las redes (las 4 candidatas downstream, los 3 generadores neuronales y el pipeline de datos) recorriendo los nn.Module de verdad: la cadena 60→30→15→7 de la CNN campeona sale de la aritmética de las capas, no de una constante escrita a mano. Compila TikZ con PlotNeuralNet (MIT, vendorizado en vendor/ porque no está en PyPI); pdflatex es una dependencia OPCIONAL — sin él se avisa y se reutiliza el PNG ya versionado.",
+        list:["bloques_desde_modelo","diagrama_vae","diagrama_wgan","diagrama_realnvp","diagrama_pipeline","render"],
+        nota:"El notebook 03 le pasa los generadores YA ENTRENADOS (no los valores por defecto de las clases): RealNVP se entrena con n_layers=6, no con el 8 por defecto — dibujar el default habría inventado dos capas inexistentes." } },
+
+    { id:"n9", col:3, y:520, type:"proc", title:"03_generadores.ipynb",
+      sub:"usa generators · gen_audit · training · eda · netviz", stat:"6 generadores, auditados",
       detail:{
         que:"Entrena y audita 6 generadores de la distribución conjunta [X | y] sobre las 102.406 ventanas de train: jitter, gaussiana, block bootstrap, VAE, WGAN-GP y RealNVP. No persiste ningún fichero de datos — las muestras se recrean dentro del notebook 04.",
         stats:[["RealNVP — AUC discrim.","0,65 (mejor red)"],["gaussiana — AUC discrim.","0,96 (peor)"],["coste (CPU)","VAE 6 min · WGAN 22 min · flow 31 min"]],
         nota:"Los generadores se reajustan desde cero en cada celda de la malla del 04 — este notebook solo audita, no aporta pesos reutilizables." } },
 
-    { id:"s_generators", col:3, y:590, type:"script", title:"generators.py",
+    { id:"s_generators", col:3, y:650, type:"script", title:"generators.py",
       sub:"src/ · importado por 03_generadores", stat:"6 clases · fit() / sample()",
       detail:{
         que:"Los seis generadores de ventanas sintéticas [X | y], todos con la misma interfaz fit()/sample() para que el notebook 04 pueda barrer la malla sin condicionales por modelo.",
         list:["JitterGenerator","GaussianGenerator","BlockBootstrapGenerator","VAEGenerator","WGANGPGenerator","RealNVPGenerator"] } },
 
-    { id:"s_gen_audit", col:3, y:660, type:"script", title:"gen_audit.py",
+    { id:"s_gen_audit", col:3, y:720, type:"script", title:"gen_audit.py",
       sub:"src/ · importado por 03_generadores", stat:"discriminative_auc · curtosis · ACF",
       detail:{
         que:"Audita cada generador contra los hechos estilizados (curtosis, ACF de |r|, apalancamiento) y calcula el discriminative AUC: ¿puede un clasificador distinguir lo sintético de lo real?",
@@ -353,17 +360,17 @@
       detail:{
         que:"Pesos entrenados de la arquitectura campeona (semilla mediana en validación). Se guarda como referencia, pero el notebook 04 reentrena desde cero en cada celda de la malla — no los reutiliza." } },
 
-    { id:"n12", col:4, y:300, type:"fig", title:"2 figuras",
-      sub:"reports/figures/ · 09–10", stat:"convergencia · pred vs real",
+    { id:"n12", col:4, y:300, type:"fig", title:"7 figuras",
+      sub:"reports/figures/ · 09–10, 16–19, 23", stat:"convergencia · pred vs real · arquitecturas",
       detail:{
-        que:"Curvas de loss de las 4 arquitecturas candidatas (evidencia numérica de convergencia) y el hexbin predicción-vs-realidad de la campeona en test.",
-        list:["09_convergencia_candidatas.png","10_pred_vs_real.png"] } },
+        que:"Curvas de loss de las 4 arquitecturas candidatas y el hexbin predicción-vs-realidad de la campeona en test (09–10); más la ficha visual de esas mismas 4 candidatas y el diagrama del pipeline de datos, generadas por netviz.py a partir de los nn.Module reales (16–19, 23).",
+        list:["09_convergencia_candidatas.png","10_pred_vs_real.png","16_arq_mlp_s.png","17_arq_mlp_l.png","18_arq_cnn_s.png","19_arq_cnn_l.png","23_pipeline_datos.png"] } },
 
-    { id:"n13", col:4, y:460, type:"fig", title:"3 figuras",
-      sub:"reports/figures/ · 11–13", stat:"convergencia · marginales · ventanas",
+    { id:"n13", col:4, y:460, type:"fig", title:"6 figuras",
+      sub:"reports/figures/ · 11–13, 20–22", stat:"convergencia · marginales · ventanas · arquitecturas",
       detail:{
-        que:"Curvas de convergencia de VAE / WGAN-GP / RealNVP, marginales real-vs-sintético en escala log (el test de las colas) y ventanas sintéticas de muestra por generador.",
-        list:["11_convergencia_generadores.png","12_marginales_generadores.png","13_ventanas_sinteticas.png"] } },
+        que:"Curvas de convergencia de VAE / WGAN-GP / RealNVP, marginales real-vs-sintético en escala log y ventanas sintéticas de muestra por generador (11–13); más los diagramas de esas tres redes, generados por netviz.py a partir de los generadores YA ENTRENADOS en esta misma celda (20–22).",
+        list:["11_convergencia_generadores.png","12_marginales_generadores.png","13_ventanas_sinteticas.png","20_arq_vae.png","21_arq_wgan_gp.png","22_arq_realnvp.png"] } },
 
     { id:"s_malla", col:5, y:210, type:"script", title:"malla.py",
       sub:"src/ · importado por 04_malla_sintetica", stat:"plan_de_malla · ejecutar_malla",
@@ -419,8 +426,10 @@
     { from:"s_baselines", to:"n8", vertical:true },
     { from:"s_models", to:"n8", vertical:true },
     { from:"s_training", to:"n8", vertical:true },
+    { from:"s_netviz", to:"n8", vertical:true },
     // código -> notebook 03 (local)
     { from:"s_training", to:"n9", vertical:true },
+    { from:"s_netviz", to:"n9", vertical:true },
     { from:"s_generators", to:"n9", vertical:true },
     { from:"s_gen_audit", to:"n9", vertical:true },
     // notebook 02 -> sus artefactos
