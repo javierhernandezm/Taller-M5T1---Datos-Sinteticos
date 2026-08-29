@@ -10,6 +10,7 @@ dependencies = [
     "pandas>=3.0.5",
     "pyarrow>=25.0.1",
     "scipy>=1.18.0",
+    "scikit-learn>=1.4",
     # --- deep learning -----------------------------------------------------
     # torch es el motor de computo (GPU). Floor en 2.7 porque es la primera
     # release con soporte Blackwell (sm_120), la arquitectura de la RTX 5070.
@@ -23,7 +24,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["ruff>=0.14.0", "pytest>=8.0.0"]
+dev = ["ruff>=0.14.0", "pytest>=8.0.0", "nbstripout>=0.9.1"]
 
 # El codigo vive en src/ y los notebooks lo importan via sys.path, no como
 # paquete instalado: no hay nada que construir.
