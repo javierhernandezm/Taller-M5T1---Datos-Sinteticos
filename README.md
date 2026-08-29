@@ -30,7 +30,8 @@ taller_b5t1/
 │   ├── training.py            #   harness único de entrenamiento (clipping, cosine, best-state)
 │   ├── generators.py          #   los 6 generadores (3 baselines + VAE, WGAN-GP, RealNVP)
 │   ├── gen_audit.py           #   auditoría de generadores contra los hechos estilizados
-│   └── malla.py               #   barrido real×sintético, reanudable con checkpoint
+│   ├── malla.py               #   barrido real×sintético, reanudable con checkpoint
+│   └── netviz.py              #   diagramas de arquitectura derivados de los nn.Module
 ├── notebooks/
 │   ├── 01_datos_y_eda.ipynb          # datos, preprocesamiento y EDA crítico
 │   ├── 02_downstream_baselines.ipynb # baselines + arquitectura downstream congelada
@@ -43,7 +44,12 @@ taller_b5t1/
 │   ├── downstream_reference.json     #   arquitectura congelada + métricas de referencia
 │   └── downstream_reference.pt       #   pesos de la campeona
 ├── reports/figures/           # figuras exportadas por los notebooks (versionadas)
-├── scripts/run_all.py         # ejecuta todos los notebooks de principio a fin
+│   └── tex/                   #   fuente TikZ y PDF vectorial de los diagramas 16-23
+├── vendor/PlotNeuralNet/      # PlotNeuralNet (MIT), vendorizado: no está en PyPI
+├── tests/test_netviz.py       # pruebas de los diagramas (no requieren LaTeX)
+├── scripts/
+│   ├── run_all.py             # ejecuta todos los notebooks de principio a fin
+│   └── make_arch_figures.py   # regenera los diagramas de arquitectura
 ├── pyproject.toml             # entorno uv (torch desde el índice cu128)
 ├── requirements.txt           # ruta pip, para quien no use uv y para Colab
 └── .python-version            # Python 3.13
@@ -116,6 +122,36 @@ uv run python scripts/run_all.py 02 03    # solo los indicados
 Ejecuta cada notebook in-place y regenera todas las figuras de `reports/figures/`. Es el
 punto de entrada de reproducibilidad que pide el enunciado. En CPU tarda bastante (el
 notebook 03 entrena tres redes generativas); en GPU, uno o dos órdenes de magnitud menos.
+
+### Diagramas de arquitectura
+
+Las figuras 16–23 de `reports/figures/` son las fichas visuales de las redes: las cuatro
+candidatas downstream, los tres generadores neuronales y el pipeline de datos. Se dibujan
+con [PlotNeuralNet](https://github.com/HarisIqbal88/PlotNeuralNet) (MIT), vendorizado en
+`vendor/PlotNeuralNet/` porque no está publicado en PyPI.
+
+```bash
+uv run python scripts/make_arch_figures.py           # solo lo que haya cambiado
+uv run python scripts/make_arch_figures.py --force   # recompila las ocho
+uv run python scripts/make_arch_figures.py --list    # ver qué genera
+```
+
+**No son dibujos.** `src/netviz.py` recorre los `nn.Module` de verdad y calcula cada cifra
+con la aritmética real de la convolución y el pooling: la cadena 60 → 30 → 15 → 7 de la CNN
+campeona no está escrita en ninguna parte. En un repo cuya tesis es *"la arquitectura queda
+congelada y solo cambian los datos"*, una figura capaz de desviarse en silencio del código
+sería una mentira documental. Por lo mismo, el sello **CONGELADA** se decide leyendo
+`downstream_reference.json`, y el notebook 03 pasa sus generadores ya entrenados para que
+el diagrama describa lo que se ejecutó y no los valores por defecto de las clases.
+
+**LaTeX es una dependencia opcional.** La compilación necesita `pdflatex` (MiKTeX en
+Windows, TeX Live en Linux/macOS) y `pdftoppm` para el PNG. Sin ellos no se rompe nada: los
+`.png` y los `.tex` van versionados, y tanto el script como las celdas de los notebooks
+avisan y reutilizan la figura cacheada. `scripts/run_all.py` sigue funcionando igual.
+
+```bash
+uv run pytest tests/ -q      # las pruebas de netviz NO necesitan LaTeX
+```
 
 ### Notebook 01: datos crudos
 

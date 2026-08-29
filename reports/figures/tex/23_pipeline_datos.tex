@@ -1,0 +1,159 @@
+\documentclass[border=10pt, multi, tikz]{standalone}
+\usepackage[T1]{fontenc}
+\usepackage{import}
+\subimport{./layers/}{init}
+\usetikzlibrary{positioning}
+\usetikzlibrary{3d}
+
+% Paleta Okabe-Ito, importada de src/eda.py PALETTE
+\definecolor{cdato}{HTML}{56B4E9}
+\definecolor{bdato}{HTML}{A6DAF5}
+\definecolor{cconv}{HTML}{0072B2}
+\definecolor{bconv}{HTML}{56B4E9}
+\definecolor{cpool}{HTML}{7F7F7F}
+\definecolor{bpool}{HTML}{B0B0B0}
+\definecolor{cgap}{HTML}{CC79A7}
+\definecolor{bgap}{HTML}{E4B4CF}
+\definecolor{cdensa}{HTML}{009E73}
+\definecolor{bdensa}{HTML}{66C7AC}
+\definecolor{csalida}{HTML}{D55E00}
+\definecolor{bsalida}{HTML}{F0956B}
+\definecolor{clatente}{HTML}{E69F00}
+\definecolor{blatente}{HTML}{F3C86B}
+\definecolor{cruido}{HTML}{F0E442}
+\definecolor{bruido}{HTML}{F7F0A0}
+
+\begin{document}
+\begin{tikzpicture}
+\tikzstyle{connection}=[ultra thick,every node/.style={sloped,allow upside down},draw=\edgecolor,opacity=0.7]
+
+\pic[shift={(0,0,0)}] at (0,0,0)
+    {Box={
+        name=pprecios,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cdato,
+        opacity=0.75,
+        height=3.0,
+        width=1.6,
+        depth=5.57
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (pprecios-east)
+    {Box={
+        name=pret,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cdato,
+        opacity=0.75,
+        height=3.0,
+        width=1.6,
+        depth=5.57
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (pret-east)
+    {Box={
+        name=pvent,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cconv,
+        opacity=0.75,
+        height=3.0,
+        width=6.4,
+        depth=13.91
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (pvent-east)
+    {Box={
+        name=pstd,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cdensa,
+        opacity=0.75,
+        height=3.0,
+        width=1.6,
+        depth=13.91
+        }
+    };
+
+\pic[shift={(5.4,0,0)}] at (pstd-east)
+    {Box={
+        name=pred,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cgap,
+        opacity=0.75,
+        height=3.0,
+        width=1.6,
+        depth=16.24
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (pred-east)
+    {Box={
+        name=py,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=csalida,
+        opacity=0.75,
+        height=3.0,
+        width=1.6,
+        depth=6.14
+        }
+    };
+
+\pic[shift={(1.2,-3.6,0)}] at (pstd-east)
+    {Box={
+        name=pgen,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=clatente,
+        opacity=0.75,
+        height=3.0,
+        width=1.6,
+        depth=17.01
+        }
+    };
+
+\pic[shift={(2.2,0,0)}] at (pgen-east)
+    {Box={
+        name=psint,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cruido,
+        opacity=0.75,
+        height=3.0,
+        width=1.6,
+        depth=17.01
+        }
+    };
+\draw [connection] (pprecios-east) -- node {\midarrow} (pret-west);
+\draw [connection] (pret-east) -- node {\midarrow} (pvent-west);
+\draw [connection] (pvent-east) -- node {\midarrow} (pstd-west);
+\draw [connection] (pstd-east) -- node {\midarrow} (pred-west);
+\draw [connection] (pred-east) -- node {\midarrow} (py-west);
+\draw [connection] (pstd-east) -- node {\midarrow} (pgen-west);
+\draw [connection] (pgen-east) -- node {\midarrow} (psint-west);
+\draw [connection] (psint-east) -- node {\midarrow} (pred-west);
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] pprecios-south) {\textbf{precios PIT} \\ S\&P 1500 \\ 2012–2026};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] pret-south) {\textbf{log-retornos} \\ diarios \\ huecos > 5d fuera};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] pvent-south) {\textbf{ventanas 60d} \\ stride 21 \\ split temporal};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] pstd-south) {\textbf{estandarizar} \\ mu, sd de train \\ (congelados)};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] pred-south) {\textbf{red congelada} \\ downstream \\ reference.json};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] py-south) {\textbf{y = ln sigma} \\ 21d adelante \\ anualizada};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] pgen-south) {\textbf{generador} \\ VAE / WGAN-GP \\ RealNVP};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] psint-south) {\textbf{ventanas} \\ sintéticas \\ {}[X | y]};
+\node[anchor=south west, align=left, inner sep=0pt] at ([yshift=14pt] current bounding box.north west) {\begin{tabular}{@{}l@{}} \bfseries\large Pipeline del taller — del precio al target, con la rama sintética \\ \mdseries\small ventana 60d -> horizonte 21d · anualización 252 · embargo 21d · la red del centro es la MISMA en las 117 celdas de la malla \end{tabular}};
+\end{tikzpicture}
+\end{document}

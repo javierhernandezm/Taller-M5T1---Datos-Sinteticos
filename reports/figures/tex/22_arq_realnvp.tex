@@ -1,0 +1,240 @@
+\documentclass[border=10pt, multi, tikz]{standalone}
+\usepackage[T1]{fontenc}
+\usepackage{import}
+\subimport{./layers/}{init}
+\usetikzlibrary{positioning}
+\usetikzlibrary{3d}
+
+% Paleta Okabe-Ito, importada de src/eda.py PALETTE
+\definecolor{cdato}{HTML}{56B4E9}
+\definecolor{bdato}{HTML}{A6DAF5}
+\definecolor{cconv}{HTML}{0072B2}
+\definecolor{bconv}{HTML}{56B4E9}
+\definecolor{cpool}{HTML}{7F7F7F}
+\definecolor{bpool}{HTML}{B0B0B0}
+\definecolor{cgap}{HTML}{CC79A7}
+\definecolor{bgap}{HTML}{E4B4CF}
+\definecolor{cdensa}{HTML}{009E73}
+\definecolor{bdensa}{HTML}{66C7AC}
+\definecolor{csalida}{HTML}{D55E00}
+\definecolor{bsalida}{HTML}{F0956B}
+\definecolor{clatente}{HTML}{E69F00}
+\definecolor{blatente}{HTML}{F3C86B}
+\definecolor{cruido}{HTML}{F0E442}
+\definecolor{bruido}{HTML}{F7F0A0}
+
+\begin{document}
+\begin{tikzpicture}
+\tikzstyle{connection}=[ultra thick,every node/.style={sloped,allow upside down},draw=\edgecolor,opacity=0.7]
+
+\pic[shift={(0,0,0)}] at (0,0,0)
+    {Box={
+        name=rx,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cdato,
+        opacity=0.75,
+        height=3.0,
+        width=1.6,
+        depth=5.57
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (rx-east)
+    {RightBandedBox={
+        name=rc0,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cdensa,
+        bandfill=bdensa,
+        opacity=0.75,
+        bandopacity=0.9,
+        height=3.0,
+        width=1.6,
+        depth=13.98
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (rc0-east)
+    {RightBandedBox={
+        name=rc1,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cdensa,
+        bandfill=bdensa,
+        opacity=0.75,
+        bandopacity=0.9,
+        height=3.0,
+        width=1.6,
+        depth=13.98
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (rc1-east)
+    {RightBandedBox={
+        name=rc2,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cdensa,
+        bandfill=bdensa,
+        opacity=0.75,
+        bandopacity=0.9,
+        height=3.0,
+        width=1.6,
+        depth=13.98
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (rc2-east)
+    {RightBandedBox={
+        name=rc3,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cdensa,
+        bandfill=bdensa,
+        opacity=0.75,
+        bandopacity=0.9,
+        height=3.0,
+        width=1.6,
+        depth=13.98
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (rc3-east)
+    {RightBandedBox={
+        name=rc4,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cdensa,
+        bandfill=bdensa,
+        opacity=0.75,
+        bandopacity=0.9,
+        height=3.0,
+        width=1.6,
+        depth=13.98
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (rc4-east)
+    {RightBandedBox={
+        name=rc5,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cdensa,
+        bandfill=bdensa,
+        opacity=0.75,
+        bandopacity=0.9,
+        height=3.0,
+        width=1.6,
+        depth=13.98
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (rc5-east)
+    {Box={
+        name=rz,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=csalida,
+        opacity=0.75,
+        height=3.0,
+        width=1.6,
+        depth=13.98
+        }
+    };
+
+\pic[shift={(-1.6,-4.2,0)}] at (rx-east)
+    {Box={
+        name=rsentrada,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cdato,
+        opacity=0.75,
+        height=3.0,
+        width=1.6,
+        depth=13.98
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (rsentrada-east)
+    {RightBandedBox={
+        name=rs0,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cdensa,
+        bandfill=bdensa,
+        opacity=0.75,
+        bandopacity=0.9,
+        height=3.0,
+        width=1.6,
+        depth=17.93
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (rs0-east)
+    {RightBandedBox={
+        name=rs2,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cdensa,
+        bandfill=bdensa,
+        opacity=0.75,
+        bandopacity=0.9,
+        height=3.0,
+        width=1.6,
+        depth=17.93
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (rs2-east)
+    {RightBandedBox={
+        name=rs4,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=csalida,
+        bandfill=bsalida,
+        opacity=0.75,
+        bandopacity=0.9,
+        height=3.0,
+        width=1.6,
+        depth=13.98
+        }
+    };
+\draw [connection] (rx-east) -- node {\midarrow} (rc0-west);
+\draw [connection] (rc0-east) -- node {\midarrow} (rc1-west);
+\draw [connection] (rc1-east) -- node {\midarrow} (rc2-west);
+\draw [connection] (rc2-east) -- node {\midarrow} (rc3-west);
+\draw [connection] (rc3-east) -- node {\midarrow} (rc4-west);
+\draw [connection] (rc4-east) -- node {\midarrow} (rc5-west);
+\draw [connection] (rc5-east) -- node {\midarrow} (rz-west);
+\draw [connection] (rsentrada-east) -- node {\midarrow} (rs0-west);
+\draw [connection] (rs0-east) -- node {\midarrow} (rs2-west);
+\draw [connection] (rs2-east) -- node {\midarrow} (rs4-west);
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] rx-south) {\textbf{x = [X | y]} \\ 61 valores};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] rc0-south) {\textbf{acoplamiento 1} \\ máscara par};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] rc1-south) {\textbf{acoplamiento 2} \\ máscara impar};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] rc2-south) {\textbf{acoplamiento 3} \\ máscara par};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] rc3-south) {\textbf{acoplamiento 4} \\ máscara impar};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] rc4-south) {\textbf{acoplamiento 5} \\ máscara par};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] rc5-south) {\textbf{acoplamiento 6} \\ máscara impar};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] rz-south) {\textbf{z \textasciitilde{} N(0, I)} \\ verosimilitud exacta};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] rsentrada-south) {\textbf{x parte a} \\ mitad congelada};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] rs0-south) {\textbf{128 unidades} \\ Linear 61->128 \\ ReLU};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] rs2-south) {\textbf{128 unidades} \\ Linear 128->128 \\ ReLU};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] rs4-south) {\textbf{s y t} \\ escala y traslación};
+\node[anchor=west, align=left, font=\scriptsize] at ([xshift=22pt, yshift=0pt] rs4-east) {$y_a = x_a$ \\ $y_b = x_b \cdot e^{s(x_a)} + t(x_a)$ \\[2pt] $\log|\det J| = \sum s(x_a)$};
+\node[anchor=south west, align=left, inner sep=0pt] at ([yshift=14pt] current bounding box.north west) {\begin{tabular}{@{}l@{}} \bfseries\large RealNVP — familia biyectiva \\ \mdseries\small 6 capas de acoplamiento afín · MLP interno 61->128->128->61 · entrenado por NLL exacta (abajo, el interior de una capa) \end{tabular}};
+\end{tikzpicture}
+\end{document}

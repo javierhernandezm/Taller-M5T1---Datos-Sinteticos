@@ -1,0 +1,116 @@
+\documentclass[border=10pt, multi, tikz]{standalone}
+\usepackage[T1]{fontenc}
+\usepackage{import}
+\subimport{./layers/}{init}
+\usetikzlibrary{positioning}
+\usetikzlibrary{3d}
+
+% Paleta Okabe-Ito, importada de src/eda.py PALETTE
+\definecolor{cdato}{HTML}{56B4E9}
+\definecolor{bdato}{HTML}{A6DAF5}
+\definecolor{cconv}{HTML}{0072B2}
+\definecolor{bconv}{HTML}{56B4E9}
+\definecolor{cpool}{HTML}{7F7F7F}
+\definecolor{bpool}{HTML}{B0B0B0}
+\definecolor{cgap}{HTML}{CC79A7}
+\definecolor{bgap}{HTML}{E4B4CF}
+\definecolor{cdensa}{HTML}{009E73}
+\definecolor{bdensa}{HTML}{66C7AC}
+\definecolor{csalida}{HTML}{D55E00}
+\definecolor{bsalida}{HTML}{F0956B}
+\definecolor{clatente}{HTML}{E69F00}
+\definecolor{blatente}{HTML}{F3C86B}
+\definecolor{cruido}{HTML}{F0E442}
+\definecolor{bruido}{HTML}{F7F0A0}
+
+\begin{document}
+\begin{tikzpicture}
+\tikzstyle{connection}=[ultra thick,every node/.style={sloped,allow upside down},draw=\edgecolor,opacity=0.7]
+
+\pic[shift={(0,0,0)}] at (0,0,0)
+    {Box={
+        name=mlplentrada,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cdato,
+        opacity=0.75,
+        height=3.0,
+        width=1.6,
+        depth=13.91
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (mlplentrada-east)
+    {RightBandedBox={
+        name=mlpl0,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cdensa,
+        bandfill=bdensa,
+        opacity=0.75,
+        bandopacity=0.9,
+        height=3.0,
+        width=1.6,
+        depth=23.03
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (mlpl0-east)
+    {RightBandedBox={
+        name=mlpl3,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cdensa,
+        bandfill=bdensa,
+        opacity=0.75,
+        bandopacity=0.9,
+        height=3.0,
+        width=1.6,
+        depth=17.93
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (mlpl3-east)
+    {RightBandedBox={
+        name=mlpl6,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cdensa,
+        bandfill=bdensa,
+        opacity=0.75,
+        bandopacity=0.9,
+        height=3.0,
+        width=1.6,
+        depth=14.2
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (mlpl6-east)
+    {Box={
+        name=mlpl9,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=csalida,
+        opacity=0.75,
+        height=3.0,
+        width=1.6,
+        depth=5.57
+        }
+    };
+\draw [connection] (mlplentrada-east) -- node {\midarrow} (mlpl0-west);
+\draw [connection] (mlpl0-east) -- node {\midarrow} (mlpl3-west);
+\draw [connection] (mlpl3-east) -- node {\midarrow} (mlpl6-west);
+\draw [connection] (mlpl6-east) -- node {\midarrow} (mlpl9-west);
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] mlplentrada-south) {\textbf{60 valores} \\ entrada};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] mlpl0-south) {\textbf{256 unidades} \\ Linear 60->256 \\ ReLU \\ Dropout p=0.1};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] mlpl3-south) {\textbf{128 unidades} \\ Linear 256->128 \\ ReLU \\ Dropout p=0.1};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] mlpl6-south) {\textbf{64 unidades} \\ Linear 128->64 \\ ReLU \\ Dropout p=0.1};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] mlpl9-south) {\textbf{1 unidad} \\ salida \\ Linear 64->1};
+\node[anchor=south west, align=left, inner sep=0pt] at ([yshift=14pt] current bounding box.north west) {\begin{tabular}{@{}l@{}} \bfseries\large mlp\_l — MLP \\ \mdseries\small 56,833 parámetros · entrada (B, 60) · salida (B,) \end{tabular}};
+\end{tikzpicture}
+\end{document}

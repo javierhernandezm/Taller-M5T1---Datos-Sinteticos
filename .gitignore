@@ -18,3 +18,11 @@ data/raw/*
 
 # Logs de ejecución por lotes
 notebooks/run_nb*.log
+
+# Intermedios de LaTeX. La compilación de los diagramas de arquitectura ocurre
+# en un temporal, pero un pdflatex lanzado a mano sí los dejaría aquí.
+*.aux
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+reports/figures/tex/*.log
