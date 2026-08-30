@@ -146,6 +146,8 @@
   .pill-list{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
   .pill{ font-family:var(--font-mono); font-size:10.5px; background:var(--surface-2); border:1px solid var(--border); border-radius:6px; padding:3px 7px; color:var(--muted); }
   .callout{ font-size:12.5px; line-height:1.55; color:var(--ink); background:var(--surface-2); border-left:3px solid var(--accent); border-radius:0 6px 6px 0; padding:10px 12px; margin-bottom:6px; }
+  aside code{ font-family:var(--font-mono); font-size:.92em; background:var(--surface); border:1px solid var(--border); border-radius:4px; padding:0 4px; }
+  aside strong{ font-weight:650; }
   .conn-title{ font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:16px 0 6px; }
   .conn-btn{
     display:block; width:100%; text-align:left; font-family:var(--font-mono); font-size:11.5px;
@@ -191,7 +193,6 @@
   <div class="legend-group">
     <span class="legend-title">Flecha</span>
     <span class="swatch"><span class="lineseg" style="border-color:var(--c-data)"></span>fichero / import producido o consumido</span>
-    <span class="swatch"><span class="lineseg dashed" style="border-color:var(--c-proc)"></span>sin fichero — copiado a mano</span>
   </div>
 </div>
 
@@ -208,6 +209,11 @@
   Generado a partir de los notebooks y de <code>data/processed/</code> /
   <code>reports/figures/</code> tal y como están en el repo. Las cifras de cada nodo son
   las que quedaron impresas en la última ejecución registrada de cada notebook.
+  <br />
+  En una versión anterior de este mapa, la auditoría del notebook 03 llegaba al 04 por una
+  flecha <em>discontinua</em> rotulada «sin fichero — cifras copiadas a mano»: era el único
+  borde del grafo que no correspondía a ningún artefacto en disco. Ya no existe. El 03
+  persiste <code>auditoria_nb03.csv</code> y <code>tstr_nb03.csv</code>, y el 04 los lee.
 </footer>
 
 <script>
@@ -331,11 +337,11 @@
         nota:"El notebook 03 le pasa los generadores YA ENTRENADOS (no los valores por defecto de las clases): RealNVP se entrena con n_layers=6, no con el 8 por defecto — dibujar el default habría inventado dos capas inexistentes." } },
 
     { id:"n9", col:3, y:520, type:"proc", title:"03_generadores.ipynb",
-      sub:"usa generators · gen_audit · training · eda · netviz", stat:"6 generadores, auditados",
+      sub:"usa generators · gen_audit · gen_utility · training · eda · netviz", stat:"6 generadores, auditados",
       detail:{
-        que:"Entrena y audita 6 generadores de la distribución conjunta [X | y] sobre las 102.406 ventanas de train: jitter, gaussiana, block bootstrap, VAE, WGAN-GP y RealNVP. No persiste ningún fichero de datos — las muestras se recrean dentro del notebook 04.",
-        stats:[["RealNVP — AUC discrim.","0,65 (mejor red)"],["gaussiana — AUC discrim.","0,96 (peor)"],["coste (CPU)","VAE 6 min · WGAN 22 min · flow 31 min"]],
-        nota:"Los generadores se reajustan desde cero en cada celda de la malla del 04 — este notebook solo audita, no aporta pesos reutilizables." } },
+        que:"Entrena y audita 6 generadores de la distribución conjunta [X | y] sobre las 102.406 ventanas de train: jitter, gaussiana, block bootstrap, VAE, WGAN-GP y RealNVP. La auditoría cubre los dos ejes que este caso de uso exige: <strong>fidelidad</strong> (¿se parecen al dato real?) y <strong>utilidad</strong> (¿sirven para entrenar?). No persiste muestras —el 04 las recrea— pero sí sus dos tablas de resultados.",
+        stats:[["RealNVP — AUC · TSTR","0,65 · 0,89 (mejor red)"],["gaussiana — AUC · TSTR","0,96 · −0,36 (peor)"],["WGAN-GP — TSTR","−0,21"],["coste (CPU)","VAE 6 min · WGAN 22 min · flow 31 min"]],
+        nota:"El tercer eje del marco de auditoría, la <strong>privacidad</strong>, queda fuera de alcance y así se declara en el notebook: son precios de mercado públicos, no registros personales, de modo que no hay secreto que un generador pueda filtrar. Y los generadores se reajustan desde cero en cada celda de la malla del 04 — este notebook publica cifras, no pesos reutilizables." } },
 
     { id:"s_generators", col:3, y:650, type:"script", title:"generators.py",
       sub:"src/ · importado por 03_generadores", stat:"6 clases · fit() / sample()",
@@ -344,10 +350,18 @@
         list:["JitterGenerator","GaussianGenerator","BlockBootstrapGenerator","VAEGenerator","WGANGPGenerator","RealNVPGenerator"] } },
 
     { id:"s_gen_audit", col:3, y:720, type:"script", title:"gen_audit.py",
-      sub:"src/ · importado por 03_generadores", stat:"discriminative_auc · curtosis · ACF",
+      sub:"src/ · importado por 03_generadores", stat:"KS · Wasserstein · corr(X,X) · AUC",
       detail:{
-        que:"Audita cada generador contra los hechos estilizados (curtosis, ACF de |r|, apalancamiento) y calcula el discriminative AUC: ¿puede un clasificador distinguir lo sintético de lo real?",
-        list:["discriminative_score","audit_generator"] } },
+        que:"Auditoría de <strong>fidelidad</strong>, en numpy/scipy puro — sin torch, para que siga siendo barata de importar. Mide los hechos estilizados (curtosis, ACF de |r|, apalancamiento), el discriminative AUC (¿puede un clasificador separar lo sintético de lo real?), las distancias entre marginales (Kolmogorov-Smirnov y Wasserstein-1, agrupadas y columna a columna) y la distancia entre las matrices de correlación 60×60 de la ventana, en Pearson y en rangos.",
+        list:["discriminative_score","audit_generator","_ks_w1","_corr_dist"],
+        nota:"KS y W1 van juntos porque miran cosas distintas: KS es la máxima separación entre las ECDF —sensible al <em>cuerpo</em>, donde está la masa— y W1 es el área entre ellas, que pondera cuánto se desplaza cada cuantil y por tanto acusa las <em>colas</em>. Del test de KS se reporta el ESTADÍSTICO, nunca el p-valor: con n≈480.000 el p-valor es 0 para cualquier diferencia y no informa de nada." } },
+
+    { id:"s_gen_utility", col:3, y:790, type:"script", title:"gen_utility.py",
+      sub:"src/ · importado por 03_generadores", stat:"TSTR frente a TRTR",
+      detail:{
+        que:"Auditoría de <strong>utilidad</strong>: entrena la arquitectura congelada del notebook 02 con datos SOLO sintéticos (TSTR) y la compara con la misma red entrenada con ventanas reales (TRTR). El cociente de los dos R² resume cuánta información útil conserva el sintético: 1,0 sería conservarla toda; negativo, que además mete sesgo.",
+        list:["entrenar_y_evaluar","tstr_trtr","resumir_tstr"],
+        nota:"No reutiliza <code>malla.ejecutar_celda</code> porque esa función hace early stopping contra la validación REAL, y un TSTR que elige época mirando datos reales ya no es un TSTR — el dato real habría entrado por la puerta de atrás, en la selección de modelo. Aquí cada brazo aparta un 10 % de su PROPIO material para elegir época. Reutiliza build_model, train_model y regression_metrics; esa dependencia indirecta no se dibuja como flecha para no cruzar la columna entera." } },
 
     { id:"n10", col:4, y:60, type:"data", title:"downstream_reference.json",
       sub:"data/processed/ · 1,5 KB", stat:"arquitectura + métricas congeladas",
@@ -366,11 +380,26 @@
         que:"Curvas de loss de las 4 arquitecturas candidatas y el hexbin predicción-vs-realidad de la campeona en test (09–10); más la ficha visual de esas mismas 4 candidatas y el diagrama del pipeline de datos, generadas por netviz.py a partir de los nn.Module reales (16–19, 23).",
         list:["09_convergencia_candidatas.png","10_pred_vs_real.png","16_arq_mlp_s.png","17_arq_mlp_l.png","18_arq_cnn_s.png","19_arq_cnn_l.png","23_pipeline_datos.png"] } },
 
-    { id:"n13", col:4, y:460, type:"fig", title:"6 figuras",
-      sub:"reports/figures/ · 11–13, 20–22", stat:"convergencia · marginales · ventanas · arquitecturas",
+    { id:"n13", col:4, y:440, type:"fig", title:"9 figuras",
+      sub:"reports/figures/ · 11–13, 20–22, 24–26", stat:"convergencia · marginales · Q-Q · colas · TSTR",
       detail:{
-        que:"Curvas de convergencia de VAE / WGAN-GP / RealNVP, marginales real-vs-sintético en escala log y ventanas sintéticas de muestra por generador (11–13); más los diagramas de esas tres redes, generados por netviz.py a partir de los generadores YA ENTRENADOS en esta misma celda (20–22).",
-        list:["11_convergencia_generadores.png","12_marginales_generadores.png","13_ventanas_sinteticas.png","20_arq_vae.png","21_arq_wgan_gp.png","22_arq_realnvp.png"] } },
+        que:"Curvas de convergencia de VAE / WGAN-GP / RealNVP, marginales real-vs-sintético en escala log y ventanas sintéticas de muestra (11–13); los diagramas de esas tres redes, generados por netviz.py a partir de los generadores YA ENTRENADOS en esta misma celda (20–22); y la auditoría ampliada (24–26).",
+        list:["11_convergencia_generadores.png","12_marginales_generadores.png","13_ventanas_sinteticas.png","20_arq_vae.png","21_arq_wgan_gp.png","22_arq_realnvp.png","24_qq_generadores.png","25_ecdf_colas.png","26_utilidad_tstr.png"],
+        nota:"Las tres nuevas dicen <em>dónde</em> se rompe cada generador, no solo cuánto: el Q-Q de dos muestras (24) hace visible el aplanamiento de las colas, la supervivencia en log-log (25) convierte la ley de potencias en una recta que el generador acompaña o abandona, y el veredicto TSTR (26) cruza fidelidad contra utilidad." } },
+
+    { id:"n19", col:4, y:600, type:"data", title:"auditoria_nb03.csv",
+      sub:"data/processed/ · 3 KB", stat:"6 generadores × 25 métricas",
+      detail:{
+        que:"La tabla de fidelidad completa, una fila por generador y una columna por métrica (incluidas las de referencia real, con sufijo _real). Existe por una razón concreta: hasta ahora estas cifras viajaban <strong>copiadas a mano</strong> dentro del notebook 04.",
+        stats:[["filas","6 generadores"],["columnas","25"],["consumidor","notebook 04 · §2.4"]],
+        nota:"La malla REENTRENA cada generador en cada una de sus celdas. Si los hiperparámetros del 03 y los de malla.construir_generador se desviaran, una tabla escrita a mano seguiría mostrando las cifras viejas y la correlación del 04 compararía dos cosas distintas sin avisar." } },
+
+    { id:"n20", col:4, y:730, type:"data", title:"tstr_nb03.csv  (+ resumen)",
+      sub:"data/processed/ · 2 KB + 1 KB", stat:"21 filas — 7 brazos × 3 semillas",
+      detail:{
+        que:"El resultado bruto de la auditoría de utilidad: un brazo TRTR (datos reales) y seis TSTR (uno por generador), cada uno con tres semillas. El fichero de resumen agrega por brazo y añade el ratio TSTR/TRTR.",
+        stats:[["TRTR — referencia","R² 0,485 ± 0,008"],["mejor generador","RealNVP — ratio 0,89"],["utilidad negativa","WGAN-GP −0,21 · gaussiana −0,36"]],
+        nota:"Se escribe fila a fila, así que relanzar la celda reanuda sin reentrenar lo ya hecho — el mismo patrón de checkpoint que usa la malla del 04." } },
 
     { id:"s_malla", col:5, y:210, type:"script", title:"malla.py",
       sub:"src/ · importado por 04_malla_sintetica", stat:"plan_de_malla · ejecutar_malla",
@@ -381,9 +410,9 @@
     { id:"n14", col:5, y:300, type:"proc", title:"04_malla_sintetica.ipynb",
       sub:"usa malla · training · eda", stat:"117 celdas · malla REDUCIDA",
       detail:{
-        que:"La pregunta del taller. Por cada (N_real, generador, ratio, semilla): submuestrea N_real ventanas reales por fecha, reentrena el generador SOLO con esas, genera ratio×N_real ventanas sintéticas, entrena la arquitectura congelada sobre la mezcla y evalúa en el test real intocado.",
-        stats:[["malla REDUCIDA","3 N × 3 ratios × 6 generadores × 3 semillas"],["celdas","117 (2,8 min en RTX 5070)"],["N reales probados","250 · 1.000 · 3.000"]],
-        nota:"Hallazgo central: por debajo de ~1.000 ventanas reales el sintético no ayuda (y a menudo empeora); el RealNVP es el único generador que mejora de forma consistente por encima de ese umbral, y la gaussiana empeora siempre." } },
+        que:"La pregunta del taller. Por cada (N_real, generador, ratio, semilla): submuestrea N_real ventanas reales por fecha, reentrena el generador SOLO con esas, genera ratio×N_real ventanas sintéticas, entrena la arquitectura congelada sobre la mezcla y evalúa en el test real intocado. Su §2.4 cruza las ocho métricas del notebook 03 —leídas de CSV— contra la ganancia medida.",
+        stats:[["malla REDUCIDA","3 N × 3 ratios × 6 generadores × 3 semillas"],["celdas","117 (2,8 min en RTX 5070)"],["N reales probados","250 · 1.000 · 3.000"],["mejor predictor de la ganancia","ratio TSTR — Spearman +0,94"]],
+        nota:"Hallazgo central: por debajo de ~1.000 ventanas reales el sintético no ayuda (y a menudo empeora); el RealNVP es el único generador que mejora de forma consistente por encima de ese umbral, y la gaussiana empeora siempre. Y el corolario que cierra el círculo: la auditoría del 03 —4 minutos— anticipa el orden de mérito que esta malla tarda horas en establecer." } },
 
     { id:"n15", col:6, y:120, type:"data", title:"malla_reducida.csv",
       sub:"data/processed/ · 13 KB", stat:"117 filas — una por celda",
@@ -432,10 +461,11 @@
     { from:"s_netviz", to:"n9", vertical:true },
     { from:"s_generators", to:"n9", vertical:true },
     { from:"s_gen_audit", to:"n9", vertical:true },
+    { from:"s_gen_utility", to:"n9", vertical:true },
     // notebook 02 -> sus artefactos
     { from:"n8", to:"n10" }, { from:"n8", to:"n11" }, { from:"n8", to:"n12" },
     // notebook 03 -> sus artefactos
-    { from:"n9", to:"n13" },
+    { from:"n9", to:"n13" }, { from:"n9", to:"n19" }, { from:"n9", to:"n20" },
     // código compartido (config.py, eda.py) -> los notebooks 02 / 03, saltando columnas
     { from:"s_config", to:"n8", bus:760 },
     { from:"s_config", to:"n9", bus:780 },
@@ -450,7 +480,11 @@
     { from:"n4", to:"n14", bus:900 },
     { from:"n5", to:"n14", bus:920 },
     { from:"n6", to:"n14", bus:940 },
-    { from:"n9", to:"n14", bus:960, dashed:true, label:"sin fichero — cifras copiadas a mano" },
+    // La auditoría del 03 llega ahora por FICHERO. Hasta la ampliación de la
+    // auditoría, aquí había una flecha discontinua rotulada "sin fichero —
+    // cifras copiadas a mano": era el único borde del grafo que no
+    // correspondía a ningún artefacto en disco.
+    { from:"n19", to:"n14" }, { from:"n20", to:"n14" },
     // notebook 04 -> resultados finales
     { from:"n14", to:"n15" }, { from:"n14", to:"n16" }, { from:"n14", to:"n17" }, { from:"n14", to:"n18" }
   ];
@@ -652,6 +686,10 @@
       "gaussianiza la distribución— el dato sintético <strong>empeora</strong> el modelo. " +
       "El generador más sofisticado (WGAN-GP) es el más peligroso con pocos datos; el más " +
       "trivial (jitter, ruido sobre datos reales) nunca hace daño.</p>" +
+      "<p>La auditoría de utilidad lo dice sin rodeos: entrenar <em>solo</em> con las muestras " +
+      "de la gaussiana o del WGAN-GP produce un modelo <strong>peor que predecir la media " +
+      "constante</strong>. La fidelidad no es un lujo estético — un generador que no reproduce " +
+      "las colas no es neutro, es tóxico.</p>" +
       '<p class="hint">Toca cualquier nodo del grafo para ver de dónde viene y a dónde va.</p>' +
       "</div>";
   }
