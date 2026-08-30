@@ -269,7 +269,10 @@ def plot_sector_vol(meta: pd.DataFrame, y: np.ndarray) -> plt.Figure:
     order = df.groupby("sector")["y"].median().sort_values().index
     data = [df.loc[df["sector"] == s, "y"].values for s in order]
     fig, ax = plt.subplots(figsize=(9, 4))
-    bp = ax.boxplot(data, labels=order, showfliers=False, patch_artist=True, vert=True)
+    # matplotlib 3.11: `labels` se renombro a `tick_labels` y `vert` quedo
+    # deprecado en favor de `orientation`.
+    bp = ax.boxplot(data, tick_labels=order, showfliers=False,
+                    patch_artist=True, orientation="vertical")
     for patch in bp["boxes"]:
         patch.set_facecolor(PALETTE["blue"])
         patch.set_alpha(0.55)
