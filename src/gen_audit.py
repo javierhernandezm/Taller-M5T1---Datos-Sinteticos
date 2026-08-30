@@ -26,6 +26,28 @@ Se añaden dos métricas globales estándar en la literatura de datos sintético
                                la ventana y el target. Mide si el generador
                                preserva la RELACIÓN X-y, que es justamente lo
                                que el modelo downstream tiene que aprender.
+
+Y dos bloques que cierran los huecos del marco estándar de auditoría de datos
+sintéticos (fidelidad marginal cuantificada + dependencia multivariada):
+
+  6. Marginales             -> estadístico de Kolmogorov-Smirnov y distancia
+                               de Wasserstein-1, sobre los retornos agrupados,
+                               sobre el target, y promediados columna a
+                               columna. Hasta ahora las marginales solo se
+                               comparaban a ojo en el histograma.
+  7. Dependencia X-X        -> distancia entre las matrices de correlación
+                               60x60 de la ventana, en Pearson y en rangos
+                               (Spearman). La métrica 5 solo mira la relación
+                               X-y; esta mira la estructura temporal INTERNA
+                               de la ventana, que es lo que un generador puede
+                               destruir sin que ninguna de las anteriores lo
+                               note.
+
+ADVERTENCIA SOBRE EL P-VALOR DE KS. Con n del orden de 10^5 el p-valor del
+test es 0 para cualquier diferencia, por minúscula que sea: el test siempre
+"rechaza" y no informa de nada. Por eso se reporta el ESTADÍSTICO (la máxima
+distancia vertical entre las ECDF, acotado en [0, 1]), que es un tamaño del
+efecto y sí se puede comparar entre generadores.
 """
 
 from __future__ import annotations
@@ -62,6 +84,55 @@ def _leverage(W: np.ndarray, lags: tuple[int, ...]) -> np.ndarray:
     return np.array(out)
 
 
+def _ks_w1(a: np.ndarray, b: np.ndarray, rng: np.random.Generator,
+           max_n: int = 100_000) -> tuple[float, float]:
+    """Estadístico de Kolmogorov-Smirnov y distancia de Wasserstein-1 entre dos muestras.
+
+    Las dos son distancias entre distribuciones univariantes, pero miran cosas
+    distintas y por eso se reportan juntas: KS es la máxima separación vertical
+    entre las ECDF —sensible al CUERPO de la distribución, donde está la masa— y
+    W1 es el área entre ellas, que sí pondera cuánto se desplaza cada cuantil y
+    por tanto acusa las COLAS. Un generador puede tener KS bajo y W1 alto: acierta
+    la forma central y falla los extremos, que es exactamente la patología que
+    este taller persigue.
+
+    El submuestreo a `max_n` acota el coste del ordenamiento; con el `rng` que
+    pasa el llamador el resultado es reproducible.
+    """
+    a, b = a.ravel(), b.ravel()
+    if len(a) > max_n:
+        a = rng.choice(a, max_n, replace=False)
+    if len(b) > max_n:
+        b = rng.choice(b, max_n, replace=False)
+    return (float(stats.ks_2samp(a, b).statistic),
+            float(stats.wasserstein_distance(a, b)))
+
+
+def _corr_dist(Wr: np.ndarray, Wg: np.ndarray, method: str = "pearson") -> float:
+    """RMS de la diferencia entre las matrices de correlación, fuera de la diagonal.
+
+    Compara la estructura de dependencia INTERNA de la ventana (60x60), no la
+    relación con el target. Se excluye la diagonal porque vale 1 en ambas por
+    construcción y solo diluiría el error.
+
+    El resultado se lee en unidades de correlación: 0,05 significa que las
+    correlaciones entre posiciones de la ventana se desvían, en promedio
+    cuadrático, cinco centésimas de las reales.
+
+    Con `method="spearman"` se correlacionan los rangos en lugar de los valores
+    —la *rank correlation* del marco de auditoría—, que captura dependencia
+    monótona no lineal y es insensible a las colas. Se rankea por columnas y se
+    reutiliza `np.corrcoef`, en vez de `stats.spearmanr`, porque sobre 60
+    columnas da el mismo número a una fracción del coste.
+    """
+    if method == "spearman":
+        Wr, Wg = stats.rankdata(Wr, axis=0), stats.rankdata(Wg, axis=0)
+    Cr = np.corrcoef(Wr, rowvar=False)
+    Cg = np.corrcoef(Wg, rowvar=False)
+    off = ~np.eye(Cr.shape[0], dtype=bool)
+    return float(np.sqrt(np.nanmean((Cr[off] - Cg[off]) ** 2)))
+
+
 def discriminative_score(XY_real: np.ndarray, XY_synth: np.ndarray,
                          seed: int = 0, max_n: int = 8000) -> float:
     """AUC de un clasificador real-vs-sintético (0,5 = indistinguibles).
@@ -89,8 +160,13 @@ def audit_generator(XY_real: np.ndarray, XY_synth: np.ndarray,
 
     Devuelve un dict plano de métricas listo para construir un DataFrame:
     momentos de los retornos, ACF de |r|, apalancamiento, preservación de la
-    correlación X-y y discriminative score. Las claves con sufijo `_real` y
-    `_synth` permiten mostrar el valor de referencia junto al obtenido.
+    correlación X-y, distancias marginales (KS y Wasserstein), distancia de la
+    matriz de correlación de la ventana y discriminative score. Las claves con
+    sufijo `_real` permiten mostrar el valor de referencia junto al obtenido.
+
+    `seed` gobierna a la vez el submuestreo de las distancias marginales y el
+    clasificador del discriminative score, de modo que dos llamadas con la
+    misma semilla devuelven exactamente lo mismo.
     """
     Wr, Wg = XY_real[:, :-1], XY_synth[:, :-1]
     yr, yg = XY_real[:, -1], XY_synth[:, -1]
@@ -102,6 +178,14 @@ def audit_generator(XY_real: np.ndarray, XY_synth: np.ndarray,
     corr_r = np.array([np.corrcoef(Wr[:, j], yr)[0, 1] for j in range(Wr.shape[1])])
     corr_g = np.array([np.corrcoef(Wg[:, j], yg)[0, 1] for j in range(Wg.shape[1])])
 
+    # marginales: agrupadas, del target, y promediadas columna a columna. La
+    # media por columna detecta desajustes que se cancelan al agrupar los 60
+    # retornos en una sola muestra.
+    rng = np.random.default_rng(seed)
+    ks_x, w1_x = _ks_w1(Wr, Wg, rng)
+    ks_y, w1_y = _ks_w1(yr, yg, rng)
+    por_col = np.array([_ks_w1(Wr[:, j], Wg[:, j], rng) for j in range(Wr.shape[1])])
+
     return {
         "sd_x": Wg.std(), "sd_x_real": Wr.std(),
         "curtosis_x": stats.kurtosis(Wg.ravel()), "curtosis_x_real": stats.kurtosis(Wr.ravel()),
@@ -112,5 +196,11 @@ def audit_generator(XY_real: np.ndarray, XY_synth: np.ndarray,
         "err_acf_abs": float(np.abs(acf_g - acf_r).mean()),
         "leverage_lag1": lev_g[0], "leverage_lag1_real": lev_r[0],
         "err_corr_xy": float(np.abs(corr_g - corr_r).mean()),
+        "ks_x": ks_x, "w1_x": w1_x,
+        "ks_y": ks_y, "w1_y": w1_y,
+        "ks_x_col_media": float(por_col[:, 0].mean()),
+        "w1_x_col_media": float(por_col[:, 1].mean()),
+        "err_corr_xx_pearson": _corr_dist(Wr, Wg, "pearson"),
+        "err_corr_xx_spearman": _corr_dist(Wr, Wg, "spearman"),
         "discriminative_auc": discriminative_score(XY_real, XY_synth, seed=seed),
     }
