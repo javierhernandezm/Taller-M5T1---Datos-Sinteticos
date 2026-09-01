@@ -255,24 +255,34 @@ sola talla confunde "esta familia es mejor" con "esta red tenía el tamaño adec
 **Auditoría de generadores** (notebook 03; referencia real: curtosis 25,2 · ACF|r| 0,062).
 Dos ejes: **fidelidad** (¿se parecen?) y **utilidad** (¿sirven para entrenar?). El ratio
 TSTR/TRTR es el R² de un modelo entrenado **solo con sintético** dividido por el del mismo
-modelo entrenado con las 102k ventanas reales; 1,0 sería conservar toda la información.
+modelo entrenado con las 92k ventanas reales de train; 1,0 sería conservar toda la
+información. Los dos brazos reciben el MISMO presupuesto de ventanas: sin esa simetría el
+ratio no significa nada.
 
 | Generador | Curtosis | ACF\|r\| lag1 | AUC discrim. | W1 por columna | ratio TSTR/TRTR |
 |---|---:|---:|---:|---:|---:|
-| jitter | 23,6 | 0,058 | 0,50 | 0,026 | 0,91 |
-| gaussiana | 0,03 | −0,015 | 0,96 | 0,236 | **−0,36** |
-| block_bootstrap | 26,2 | 0,125 | 0,76 | 0,057 | 0,64 |
-| VAE | 1,43 | −0,006 | 0,89 | 0,158 | 0,61 |
-| WGAN-GP | 4,43 | −0,013 | 0,83 | 0,095 | **−0,21** |
-| **RealNVP** | **23,2** | **0,042** | **0,65** | **0,057** | **0,89** |
+| jitter | 23,6 | 0,058 | 0,51 | 0,026 | 0,96 |
+| gaussiana | 0,03 | −0,015 | 0,96 | 0,236 | **−0,39** |
+| block_bootstrap | 26,2 | 0,125 | 0,76 | 0,057 | 0,61 |
+| VAE | 1,50 | −0,005 | 0,90 | 0,157 | 0,68 |
+| WGAN-GP | 4,02 | −0,012 | 0,81 | 0,091 | 0,33 |
+| **RealNVP** | **22,5** | **0,042** | **0,66** | **0,054** | **0,87** |
 
-> **Dos de los seis generadores tienen utilidad negativa.** Un modelo entrenado con las
-> muestras de la gaussiana o del WGAN-GP es *peor que predecir la media constante*. La
-> fidelidad no es un lujo estético: un generador que no reproduce las colas no es neutro,
-> es tóxico. Y el WGAN-GP es el caso más instructivo — su pérdida converge limpiamente y su
-> modelo downstream entrena 35 épocas mejorando contra su propia validación sintética, para
-> aterrizar en R² −0,04 sobre datos reales. **Converger sobre datos sintéticos no dice nada
-> sobre la utilidad real.**
+> **La gaussiana tiene utilidad negativa:** un modelo entrenado con sus muestras es *peor
+> que predecir la media constante*. La fidelidad no es un lujo estético — un generador que
+> no reproduce las colas no es neutro, es tóxico.
+>
+> El orden de la columna TSTR reproduce **casi exactamente** el del AUC discriminativo, que
+> se mide sin entrenar un solo modelo downstream. Y ninguna de las dos columnas premia a la
+> sofisticación: el jitter —ruido sobre el dato real, quince líneas de código— conserva el
+> 96 % de la utilidad, y las tres redes generativas quedan por detrás.
+>
+> **Nota de vigencia.** Estos números son con la campeona `gru_s` a 100 épocas. Con la
+> campeona anterior (`cnn_l` a 40) el WGAN-GP salía con utilidad **negativa** (−0,21) y
+> aquí sale en +0,33: el brazo TSTR mide "cuánto sabe enseñar el generador *a este
+> modelo*", no una propiedad del generador en abstracto. Es un recordatorio de que la
+> utilidad es relativa al downstream, y de por qué el TSTR se recalcula entero cuando
+> cambia la arquitectura congelada en vez de reanudarse desde el CSV.
 
 **Malla real×sintético** (notebook 04; 117 celdas, Δ R² pareado por semilla):
 
