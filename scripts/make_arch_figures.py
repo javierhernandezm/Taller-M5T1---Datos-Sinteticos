@@ -1,7 +1,7 @@
 """
 make_arch_figures.py — Regenera los diagramas de arquitectura (PlotNeuralNet).
 
-Produce las figuras 16 a 23 de reports/figures/: las cuatro candidatas
+Produce las figuras 16 a 23 y 27 de reports/figures/: las cinco candidatas
 downstream del notebook 02, los tres generadores neuronales del 03 y el
 pipeline de datos del taller. Los diagramas se derivan por introspección de los
 `nn.Module` reales (ver src/netviz.py), así que basta cambiar una arquitectura

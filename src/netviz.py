@@ -400,6 +400,8 @@ CANDIDATAS: dict[str, tuple[str, dict]] = {
     "mlp_l": ("mlp", {"hidden": (256, 128, 64)}),
     "cnn_s": ("cnn", {"channels": (32, 64)}),
     "cnn_l": ("cnn", {"channels": (32, 64, 128), "fc": 128}),
+    "cnn_deep_k3": ("cnn", {"channels": (32, 64, 128, 256), "kernel": 3,
+                             "fc": 128, "dropout": 0.1}),
 }
 
 
@@ -426,7 +428,7 @@ def _misma_arquitectura(a: tuple[str, dict], b: tuple[str, dict] | None) -> bool
 
 
 def diagrama_candidata(nombre_fig: str, clave: str, cfg: Config, in_len: int) -> Diagrama:
-    """Ficha de una de las cuatro candidatas del notebook 02."""
+    """Ficha de una de las candidatas del notebook 02."""
     arch, kwargs = CANDIDATAS[clave]
     model = build_model(arch, in_len=in_len, **kwargs) if arch == "mlp" \
         else build_model(arch, **kwargs)
@@ -604,7 +606,7 @@ GENERADORES_03: dict[str, dict] = {
 
 def diagramas_taller(cfg: Config | None = None,
                      generadores: dict | None = None) -> list[Diagrama]:
-    """Los ocho diagramas del taller, en el orden de numeración de figuras.
+    """Los nueve diagramas del taller, agrupados por tipo.
 
     `generadores` acepta el diccionario de instancias YA construidas del
     notebook 03 (`{"vae": VAEGenerator(...), ...}`), que es la forma de
@@ -616,7 +618,8 @@ def diagramas_taller(cfg: Config | None = None,
     cfg = cfg or Config()
     in_len = cfg.window_len
     d = in_len + 1                      # el par conjunto [X | y] que ven los generadores
-    nombres = ["16_arq_mlp_s", "17_arq_mlp_l", "18_arq_cnn_s", "19_arq_cnn_l"]
+    nombres = ["16_arq_mlp_s", "17_arq_mlp_l", "18_arq_cnn_s", "19_arq_cnn_l",
+               "27_arq_cnn_deep_k3"]
     diags = [diagrama_candidata(n, k, cfg, in_len)
              for n, k in zip(nombres, CANDIDATAS)]
 
@@ -708,12 +711,13 @@ def render(diag: Diagrama, *, fig_dir: Path | None = None, force: bool = False,
     # CON LaTeX vería tex == nuevo y se saltaría la regeneración para siempre.
     try:
         pdf_b, png_b = _compilar(nuevo, diag.nombre, dpi)
-    except LatexNoDisponible:
+    except (LatexNoDisponible, RuntimeError) as exc:
+        motivo = "sin pdflatex" if isinstance(exc, LatexNoDisponible) else "falló pdflatex"
         if png_path.exists():
-            print(f"  ! {diag.nombre}: sin pdflatex; se usa el PNG cacheado "
+            print(f"  ! {diag.nombre}: {motivo}; se usa el PNG cacheado "
                   "(instala MiKTeX/TeX Live para regenerarlo)")
             return png_path
-        print(f"  ! {diag.nombre}: sin pdflatex y sin PNG cacheado; figura omitida")
+        print(f"  ! {diag.nombre}: {motivo} y sin PNG cacheado; figura omitida")
         return None
     tex_path.write_text(nuevo, encoding="utf-8", newline="\n")
     pdf_path.write_bytes(pdf_b)

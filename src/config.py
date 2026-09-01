@@ -173,5 +173,11 @@ def set_global_seed(seed: int = 42) -> None:
 
         torch.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
+        # Las semillas no bastan en CUDA si cuDNN puede escoger algoritmos
+        # distintos entre ejecuciones. La búsqueda de arquitectura necesita
+        # que una misma semilla produzca realmente el mismo resultado.
+        if torch.backends.cudnn.is_available():
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
     except ModuleNotFoundError:
         pass

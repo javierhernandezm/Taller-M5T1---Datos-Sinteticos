@@ -137,12 +137,12 @@ con [PlotNeuralNet](https://github.com/HarisIqbal88/PlotNeuralNet) (MIT), vendor
 
 ```bash
 uv run python scripts/make_arch_figures.py           # solo lo que haya cambiado
-uv run python scripts/make_arch_figures.py --force   # recompila las ocho
+uv run python scripts/make_arch_figures.py --force   # recompila las nueve
 uv run python scripts/make_arch_figures.py --list    # ver qué genera
 ```
 
 **No son dibujos.** `src/netviz.py` recorre los `nn.Module` de verdad y calcula cada cifra
-con la aritmética real de la convolución y el pooling: la cadena 60 → 30 → 15 → 7 de la CNN
+con la aritmética real de la convolución y el pooling: la cadena 60 → 30 → 15 → 7 → 3 de la CNN
 campeona no está escrita en ninguna parte. En un repo cuya tesis es *"la arquitectura queda
 congelada y solo cambian los datos"*, una figura capaz de desviarse en silencio del código
 sería una mentira documental. Por lo mismo, el sello **CONGELADA** se decide leyendo
@@ -226,8 +226,9 @@ personas no se pisen:
 
 ## Resultados hasta ahora
 
-**Modelo downstream congelado** (notebook 02): CNN 1-D de 68k parámetros, R² en test
-0,456 ± 0,006 (3 semillas), frente a 0,359 de HAR-RV y 0,120 de persistencia.
+**Modelo downstream congelado** (notebook 02): CNN 1-D profunda de 163k parámetros,
+kernel 3 y cuatro bloques convolucionales, R² en test 0,465 ± 0,008 (3 semillas),
+frente a 0,359 de HAR-RV y 0,120 de persistencia.
 
 **Auditoría de generadores** (notebook 03; referencia real: curtosis 25,2 · ACF|r| 0,062).
 Dos ejes: **fidelidad** (¿se parecen?) y **utilidad** (¿sirven para entrenar?). El ratio

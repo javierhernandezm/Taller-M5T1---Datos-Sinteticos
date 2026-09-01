@@ -94,9 +94,10 @@ def test_walker_rechaza_capas_desconocidas():
 # Coherencia del TikZ generado
 # --------------------------------------------------------------------------- #
 
-def test_se_generan_las_ocho_figuras(diagramas):
+def test_se_generan_las_nueve_figuras(diagramas):
     assert [d.nombre for d in diagramas] == [
         "16_arq_mlp_s", "17_arq_mlp_l", "18_arq_cnn_s", "19_arq_cnn_l",
+        "27_arq_cnn_deep_k3",
         "20_arq_vae", "21_arq_wgan_gp", "22_arq_realnvp", "23_pipeline_datos",
     ]
 

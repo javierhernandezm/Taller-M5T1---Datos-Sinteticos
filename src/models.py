@@ -72,9 +72,69 @@ class ConvNet1D(nn.Module):
         return self.head(h).squeeze(-1)
 
 
+class ResidualBlock1D(nn.Module):
+    """Bloque residual 1-D con normalización por grupos y dilatación opcional."""
+
+    def __init__(self, in_ch: int, out_ch: int, *, kernel: int = 3,
+                 dilation: int = 1, stride: int = 1,
+                 dropout: float = 0.1) -> None:
+        super().__init__()
+        padding = dilation * (kernel // 2)
+        groups = min(8, out_ch)
+        while out_ch % groups:
+            groups -= 1
+        self.main = nn.Sequential(
+            nn.Conv1d(in_ch, out_ch, kernel, stride=stride,
+                      padding=padding, dilation=dilation, bias=False),
+            nn.GroupNorm(groups, out_ch),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Conv1d(out_ch, out_ch, kernel, padding=padding,
+                      dilation=dilation, bias=False),
+            nn.GroupNorm(groups, out_ch),
+        )
+        self.skip = (nn.Identity() if in_ch == out_ch and stride == 1 else
+                     nn.Conv1d(in_ch, out_ch, 1, stride=stride, bias=False))
+        self.act = nn.GELU()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.act(self.main(x) + self.skip(x))
+
+
+class ResidualConvNet1D(nn.Module):
+    """CNN residual para ventanas cortas, con reducción progresiva y GAP."""
+
+    def __init__(self, widths: tuple[int, ...] = (32, 64, 128),
+                 blocks_per_stage: int = 1, kernel: int = 3,
+                 dilated: bool = False, fc: int = 128,
+                 dropout: float = 0.1) -> None:
+        super().__init__()
+        self.stem = nn.Conv1d(1, widths[0], kernel, padding=kernel // 2)
+        blocks: list[nn.Module] = []
+        prev = widths[0]
+        for stage, width in enumerate(widths):
+            for block in range(blocks_per_stage):
+                blocks.append(ResidualBlock1D(
+                    prev, width, kernel=kernel,
+                    dilation=(2 ** block if dilated else 1),
+                    stride=(2 if stage > 0 and block == 0 else 1),
+                    dropout=dropout,
+                ))
+                prev = width
+        self.blocks = nn.Sequential(*blocks)
+        self.head = nn.Sequential(
+            nn.AdaptiveAvgPool1d(1), nn.Flatten(),
+            nn.Linear(prev, fc), nn.GELU(), nn.Dropout(dropout),
+            nn.Linear(fc, 1),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.head(self.blocks(self.stem(x.unsqueeze(1)))).squeeze(-1)
+
+
 #: Registro de arquitecturas: el nombre + kwargs es todo lo que se persiste
 #: para reconstruir el modelo congelado en notebooks posteriores.
-_REGISTRY = {"mlp": MLP, "cnn": ConvNet1D}
+_REGISTRY = {"mlp": MLP, "cnn": ConvNet1D, "rescnn": ResidualConvNet1D}
 
 
 def build_model(name: str, **kwargs) -> nn.Module:
