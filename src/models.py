@@ -72,9 +72,41 @@ class ConvNet1D(nn.Module):
         return self.head(h).squeeze(-1)
 
 
+class GRUNet(nn.Module):
+    """Recurrente (GRU) de 2 capas: el contraste secuencial de la comparativa.
+
+    Las otras candidatas son invariantes al orden en distinto grado: el MLP lo
+    es por completo (la ventana entra aplanada) y la CNN solo ve vecindarios
+    locales antes del global average pooling. La GRU procesa la ventana paso a
+    paso manteniendo un estado oculto, así que es la única capaz de representar
+    dependencias de largo alcance dentro de los 60 días — la familia natural si
+    la hipótesis es que el ORDEN de los retornos (rachas, clustering de
+    volatilidad) lleva señal más allá de su magnitud.
+
+    En la práctica, con ventanas cortas y una señal dominada por la escala
+    reciente, las convolucionales suelen igualarla o superarla con bastante
+    menos coste. La comparativa del notebook 02 lo mide en lugar de suponerlo:
+    ese es justo el papel de esta candidata.
+    """
+
+    def __init__(self, hidden: int = 64, layers: int = 2, fc: int = 64,
+                 dropout: float = 0.2) -> None:
+        super().__init__()
+        self.gru = nn.GRU(1, hidden, num_layers=layers, batch_first=True,
+                          dropout=dropout if layers > 1 else 0.0)
+        self.head = nn.Sequential(
+            nn.Linear(hidden, fc), nn.ReLU(), nn.Dropout(dropout),
+            nn.Linear(fc, 1),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:  # (B, 60) -> (B,)
+        out, _ = self.gru(x.unsqueeze(-1))               # (B, 60, 1) -> (B, 60, H)
+        return self.head(out[:, -1]).squeeze(-1)         # último estado
+
+
 #: Registro de arquitecturas: el nombre + kwargs es todo lo que se persiste
 #: para reconstruir el modelo congelado en notebooks posteriores.
-_REGISTRY = {"mlp": MLP, "cnn": ConvNet1D}
+_REGISTRY = {"mlp": MLP, "cnn": ConvNet1D, "gru": GRUNet}
 
 
 def build_model(name: str, **kwargs) -> nn.Module:
