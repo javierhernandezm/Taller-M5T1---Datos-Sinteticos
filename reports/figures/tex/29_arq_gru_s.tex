@@ -1,0 +1,130 @@
+\documentclass[border=10pt, multi, tikz]{standalone}
+\usepackage[T1]{fontenc}
+\usepackage{import}
+\subimport{./layers/}{init}
+\usetikzlibrary{positioning}
+\usetikzlibrary{3d}
+
+% Paleta Okabe-Ito, importada de src/eda.py PALETTE
+\definecolor{cdato}{HTML}{56B4E9}
+\definecolor{bdato}{HTML}{A6DAF5}
+\definecolor{cconv}{HTML}{0072B2}
+\definecolor{bconv}{HTML}{56B4E9}
+\definecolor{cpool}{HTML}{7F7F7F}
+\definecolor{bpool}{HTML}{B0B0B0}
+\definecolor{cgap}{HTML}{CC79A7}
+\definecolor{bgap}{HTML}{E4B4CF}
+\definecolor{cdensa}{HTML}{009E73}
+\definecolor{bdensa}{HTML}{66C7AC}
+\definecolor{csalida}{HTML}{D55E00}
+\definecolor{bsalida}{HTML}{F0956B}
+\definecolor{clatente}{HTML}{E69F00}
+\definecolor{blatente}{HTML}{F3C86B}
+\definecolor{cruido}{HTML}{F0E442}
+\definecolor{bruido}{HTML}{F7F0A0}
+\definecolor{crecurrente}{HTML}{004E7C}
+\definecolor{brecurrente}{HTML}{56B4E9}
+
+\begin{document}
+\begin{tikzpicture}
+\tikzstyle{connection}=[ultra thick,every node/.style={sloped,allow upside down},draw=\edgecolor,opacity=0.7]
+
+\pic[shift={(0,0,0)}] at (0,0,0)
+    {Box={
+        name=grusentrada,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cdato,
+        opacity=0.75,
+        height=3.0,
+        width=1.6,
+        depth=13.91
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (grusentrada-east)
+    {Box={
+        name=grus0r0,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=crecurrente,
+        opacity=0.75,
+        height=3.0,
+        width=6.4,
+        depth=13.91
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (grus0r0-east)
+    {Box={
+        name=grus0r1,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=crecurrente,
+        opacity=0.75,
+        height=3.0,
+        width=6.4,
+        depth=13.91
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (grus0r1-east)
+    {Box={
+        name=grus0ult,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cgap,
+        opacity=0.75,
+        height=3.0,
+        width=1.6,
+        depth=14.2
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (grus0ult-east)
+    {RightBandedBox={
+        name=grus1,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=cdensa,
+        bandfill=bdensa,
+        opacity=0.75,
+        bandopacity=0.9,
+        height=3.0,
+        width=1.6,
+        depth=14.2
+        }
+    };
+
+\pic[shift={(2.15,0,0)}] at (grus1-east)
+    {Box={
+        name=grus4,
+        caption= ,
+        xlabel={{" ","dummy"}},
+        zlabel= ,
+        fill=csalida,
+        opacity=0.75,
+        height=3.0,
+        width=1.6,
+        depth=5.57
+        }
+    };
+\draw [connection] (grusentrada-east) -- node {\midarrow} (grus0r0-west);
+\draw [connection] (grus0r0-east) -- node {\midarrow} (grus0r1-west);
+\draw [connection] (grus0r1-east) -- node {\midarrow} (grus0ult-west);
+\draw [connection] (grus0ult-east) -- node {\midarrow} (grus1-west);
+\draw [connection] (grus1-east) -- node {\midarrow} (grus4-west);
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] grusentrada-south) {\textbf{(1, 60)} \\ entrada};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] grus0r0-south) {\textbf{(64, 60)} \\ GRU capa 1/2 \\ Dropout p=0.2};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] grus0r1-south) {\textbf{(64, 60)} \\ GRU capa 2/2};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] grus0ult-south) {\textbf{(64, 1)} \\ último estado \\ h[:, -1]};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] grus1-south) {\textbf{64 unidades} \\ Linear 64->64 \\ ReLU \\ Dropout p=0.2};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] grus4-south) {\textbf{1 unidad} \\ salida \\ Linear 64->1};
+\node[anchor=south west, align=left, inner sep=0pt] at ([yshift=14pt] current bounding box.north west) {\begin{tabular}{@{}l@{}} \bfseries\large gru\_s — GRU (recurrente) \\ \mdseries\small 42,049 parámetros · entrada (B, 60) · salida (B,) · CONGELADA: referencia de la malla real×sintético \end{tabular}};
+\end{tikzpicture}
+\end{document}

@@ -47,7 +47,7 @@ taller_b5t1/
 │   ├── auditoria_nb03.csv            #   tabla de fidelidad de los 6 generadores
 │   └── tstr_nb03.csv                 #   utilidad TSTR/TRTR, una fila por brazo y semilla
 ├── reports/figures/           # figuras exportadas por los notebooks (versionadas)
-│   └── tex/                   #   fuente TikZ y PDF vectorial de los diagramas 16-23
+│   └── tex/                   #   fuente TikZ y PDF vectorial de los diagramas de arquitectura
 ├── vendor/PlotNeuralNet/      # PlotNeuralNet (MIT), vendorizado: no está en PyPI
 ├── tests/
 │   ├── test_netviz.py         # pruebas de los diagramas (no requieren LaTeX)
@@ -130,20 +130,26 @@ notebook 03 entrena tres redes generativas); en GPU, uno o dos órdenes de magni
 
 ### Diagramas de arquitectura
 
-Las figuras 16–23 de `reports/figures/` son las fichas visuales de las redes: las cuatro
-candidatas downstream, los tres generadores neuronales y el pipeline de datos. Se dibujan
-con [PlotNeuralNet](https://github.com/HarisIqbal88/PlotNeuralNet) (MIT), vendorizado en
+Las figuras 16–23 y 29–30 de `reports/figures/` son las fichas visuales de las redes: las
+seis candidatas downstream (16–19 y 29–30), los tres generadores neuronales (20–22) y el
+pipeline de datos (23). Se dibujan con
+[PlotNeuralNet](https://github.com/HarisIqbal88/PlotNeuralNet) (MIT), vendorizado en
 `vendor/PlotNeuralNet/` porque no está publicado en PyPI.
+
+Las dos GRU llevan número 29–30 y no 20–21 por deuda de numeración: esos huecos ya
+estaban ocupados cuando se añadieron, y renumerar la carpeta obliga a tocar los cuatro
+notebooks. Pendiente de un cambio propio.
 
 ```bash
 uv run python scripts/make_arch_figures.py           # solo lo que haya cambiado
-uv run python scripts/make_arch_figures.py --force   # recompila las ocho
+uv run python scripts/make_arch_figures.py --force   # recompila las diez
 uv run python scripts/make_arch_figures.py --list    # ver qué genera
 ```
 
 **No son dibujos.** `src/netviz.py` recorre los `nn.Module` de verdad y calcula cada cifra
-con la aritmética real de la convolución y el pooling: la cadena 60 → 30 → 15 → 7 de la CNN
-campeona no está escrita en ninguna parte. En un repo cuya tesis es *"la arquitectura queda
+con la aritmética real de la convolución, el pooling y la recurrencia: la cadena
+60 → 30 → 15 → 7 de la CNN grande no está escrita en ninguna parte, y que la GRU mantenga
+la secuencia en 60 hasta el último estado tampoco — sale de recorrer las capas. En un repo cuya tesis es *"la arquitectura queda
 congelada y solo cambian los datos"*, una figura capaz de desviarse en silencio del código
 sería una mentira documental. Por lo mismo, el sello **CONGELADA** se decide leyendo
 `downstream_reference.json`, y el notebook 03 pasa sus generadores ya entrenados para que
@@ -226,8 +232,25 @@ personas no se pisen:
 
 ## Resultados hasta ahora
 
-**Modelo downstream congelado** (notebook 02): CNN 1-D de 68k parámetros, R² en test
-0,456 ± 0,006 (3 semillas), frente a 0,359 de HAR-RV y 0,120 de persistencia.
+**Modelo downstream congelado** (notebook 02): **GRU de 42k parámetros** (2 capas, h=64),
+R² en test 0,473 ± 0,006 (3 semillas), frente a 0,359 de HAR-RV y 0,120 de persistencia.
+
+La búsqueda compara **tres familias en dos tallas cada una** — comparar familias con una
+sola talla confunde "esta familia es mejor" con "esta red tenía el tamaño adecuado":
+
+| candidata | params | val MSE |
+|---|---:|---:|
+| mlp_s | 16.129 | 0,1104 |
+| mlp_l | 56.833 | 0,1141 |
+| cnn_s | 14.721 | 0,0945 |
+| cnn_l | 68.225 | 0,0946 |
+| **gru_s** | **42.049** | **0,0915** |
+| gru_l | 84.601 | 0,0917 |
+
+> Las dos recurrentes baten a las cuatro anteriores, y **la pequeña gana a la grande**.
+> El orden de los retornos lleva señal que ni el MLP (invariante al orden) ni la CNN
+> (solo vecindarios locales) capturan; y la ventaja es del *sesgo inductivo* de la
+> familia, no de la capacidad — duplicar parámetros dentro de la familia no añade nada.
 
 **Auditoría de generadores** (notebook 03; referencia real: curtosis 25,2 · ACF|r| 0,062).
 Dos ejes: **fidelidad** (¿se parecen?) y **utilidad** (¿sirven para entrenar?). El ratio
