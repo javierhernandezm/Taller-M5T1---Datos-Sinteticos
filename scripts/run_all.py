@@ -48,12 +48,20 @@ def run(path: Path, timeout: int) -> int:
     import nbformat
     from nbclient import NotebookClient
 
+    from nbclient.exceptions import CellExecutionError
+
     nb = nbformat.read(path, as_version=4)
     t0 = time.time()
     # cwd = carpeta del notebook, para que las rutas relativas se comporten
     # igual que al abrirlo en JupyterLab.
-    NotebookClient(nb, timeout=timeout, kernel_name="python3",
-                   resources={"metadata": {"path": str(NB_DIR)}}).execute()
+    try:
+        NotebookClient(nb, timeout=timeout, kernel_name="python3",
+                       resources={"metadata": {"path": str(NB_DIR)}}).execute()
+    except CellExecutionError:
+        # Guardar el notebook parcialmente ejecutado: el traceback queda
+        # dentro de la celda que falló y las celdas previas conservan sus
+        # salidas, que es justo lo que se necesita para diagnosticar.
+        pass
     nbformat.write(nb, path)
 
     errores = [o for c in nb.cells if c.cell_type == "code"
@@ -69,8 +77,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     ap.add_argument("prefijos", nargs="*",
                     help="prefijos numéricos a ejecutar (p. ej. 02 03); vacío = todos")
-    ap.add_argument("--timeout", type=int, default=7200,
-                    help="segundos máximos por celda (por defecto 7200)")
+    # 12 h: la celda de la malla del notebook 04 (111 entrenamientos a 300
+    # épocas) supera con holgura las 2 h en GPU. La malla es reanudable, pero
+    # un timeout corto obliga a relanzar sin necesidad.
+    ap.add_argument("--timeout", type=int, default=43200,
+                    help="segundos máximos por celda (por defecto 43200)")
     ap.add_argument("--list", action="store_true", help="listar notebooks y salir")
     args = ap.parse_args()
 
@@ -91,6 +102,15 @@ def main() -> int:
     for p in objetivo:
         print(f"[{p.name}] ...")
         fallos += run(p, args.timeout)
+        if fallos:
+            # Los notebooks son una cadena de dependencias (cada uno consume
+            # artefactos del anterior): seguir tras un fallo ejecutaría los
+            # siguientes contra artefactos obsoletos y daría resultados
+            # silenciosamente incoherentes.
+            print(f"\nDetenido en {p.name}: corrige el error y relanza desde "
+                  f"ese notebook (p. ej. `python scripts/run_all.py "
+                  f"{p.name[:2]} ...`).")
+            break
     print("\nTerminado." if not fallos else f"\nTerminado con {fallos} celdas en error.")
     return 1 if fallos else 0
 

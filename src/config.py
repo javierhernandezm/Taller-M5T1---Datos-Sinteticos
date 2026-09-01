@@ -109,6 +109,18 @@ class Config:
     universe_mapping_status: str = "READY"
     universe_status: str = "OK"
 
+    #: Si True, el universo se restringe además a activos con SERIE DE PRECIOS
+    #: COMPLETA: cotizan desde la primera hasta la última fecha del panel
+    #: (con tolerancia en los bordes) y sin huecos internos > max_gap_days.
+    #: Se descartan deslistados y listados tardíos, y NO se recorta por
+    #: pertenencia al índice. Ojo: esto introduce sesgo de supervivencia de
+    #: forma deliberada — está documentado como limitación en el notebook 01.
+    serie_completa: bool = True
+    #: Tolerancia (días naturales) en los bordes del panel para considerar
+    #: una serie "completa": absorbe que no todos los activos coticen
+    #: exactamente el primer/último día hábil del panel.
+    tolerancia_bordes_dias: int = 7
+
     # --- Construcción de ventanas ------------------------------------------
     window_len: int = 60          #: días de retornos en la ventana de entrada X
     horizon: int = 21             #: días hábiles del horizonte del target

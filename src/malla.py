@@ -45,12 +45,9 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 
-from .eda import PALETTE, _style
 from .generators import (BlockBootstrapGenerator, GaussianGenerator, JitterGenerator,
                          RealNVPGenerator, VAEGenerator, WGANGPGenerator)
 from .models import build_model
@@ -80,10 +77,13 @@ def construir_generador(nombre: str):
         "jitter": lambda: JitterGenerator(noise=0.10),
         "gaussiana": lambda: GaussianGenerator(),
         "block_bootstrap": lambda: BlockBootstrapGenerator(mean_block=10),
-        "vae": lambda: VAEGenerator(latent=16, hidden=256, beta=1.0, epochs=40),
-        "wgan_gp": lambda: WGANGPGenerator(latent=32, hidden=256, epochs=150,
+        # Épocas alineadas con el notebook 03 (subidas sustancialmente). En la
+        # malla cada fit ve pocas ventanas (N_real), así que las épocas son
+        # baratas: pocas iteraciones por época.
+        "vae": lambda: VAEGenerator(latent=16, hidden=256, beta=1.0, epochs=150),
+        "wgan_gp": lambda: WGANGPGenerator(latent=32, hidden=256, epochs=400,
                                            lr=2e-4, n_critic=5),
-        "realnvp": lambda: RealNVPGenerator(n_layers=6, hidden=128, epochs=30),
+        "realnvp": lambda: RealNVPGenerator(n_layers=6, hidden=128, epochs=200),
     }
     if nombre not in fabrica:
         raise KeyError(f"Generador desconocido: {nombre!r}. Disponibles: {list(fabrica)}")
@@ -126,52 +126,24 @@ def submuestrear_por_fechas(meta_train: pd.DataFrame, n: int, seed: int) -> np.n
 # Una celda del experimento
 # --------------------------------------------------------------------------- #
 
-def resolver_presupuesto(n_real: int, ratio: float | None,
-                         n_synth: int | None) -> tuple[float, int]:
-    """Traduce el presupuesto de sintéticos a (ratio, n_synth), venga como venga.
-
-    La malla admite dos diseños experimentales que son la misma celda vista
-    desde dos lados:
-
-    * **ratio fijo** (`plan_de_malla`): "3 sintéticos por cada real". Responde
-      ¿cuánto añade el sintético *en proporción* al presupuesto real?
-    * **conteo fijo** (`plan_de_curvas`): "20.000 sintéticos, haya los reales
-      que haya". Responde ¿cómo cae el error al añadir reales, para un
-      presupuesto sintético dado?
-
-    El que se pase manda; el otro se deriva. Así una fila del CSV siempre
-    lleva los dos y las dos mallas se comparan sin traducir nada a mano.
-    """
-    if n_synth is not None:
-        n_synth = int(n_synth)
-        return n_synth / n_real, n_synth
-    if ratio is not None:
-        return float(ratio), int(round(ratio * n_real))
-    raise ValueError("Hay que dar 'ratio' o 'n_synth' (uno de los dos, no ninguno).")
-
-
-def ejecutar_celda(*, n_real: int, generador: str, seed: int,
-                   ratio: float | None = None, n_synth: int | None = None,
+def ejecutar_celda(*, n_real: int, generador: str, ratio: float, seed: int,
                    Xs_train, ys_train, meta_train, Xs_val, ys_val,
                    Xs_test, y_test_fisico, std, ref, device) -> dict:
     """Ejecuta una celda completa y devuelve su fila de resultados.
-
-    El presupuesto de sintéticos se declara con `ratio` **o** con `n_synth`
-    (ver `resolver_presupuesto`); la fila devuelta lleva siempre los dos.
 
     `Xs_*`/`ys_*` llegan YA estandarizados; `y_test_fisico` es el target
     de test SIN estandarizar, para reportar métricas en unidades de ln σ.
     """
     t0 = time.time()
-    ratio, n_synth = resolver_presupuesto(n_real, ratio, n_synth)
 
     # 1) escasez: qué ventanas reales "existen" en este escenario
     idx = submuestrear_por_fechas(meta_train, n_real, seed)
     Xr, yr = Xs_train[idx], ys_train[idx]
 
     # 2-3) generador reentrenado SOLO con esas ventanas, y muestreo
+    n_synth = int(round(ratio * n_real))
     if generador == SOLO_REAL or n_synth == 0:
-        X_mix, y_mix, ratio, n_synth = Xr, yr, 0.0, 0
+        X_mix, y_mix, n_synth = Xr, yr, 0
     else:
         XY = np.column_stack([Xr, yr]).astype(np.float32)
         gen = construir_generador(generador)
@@ -212,42 +184,14 @@ def plan_de_malla(n_reales, generadores, ratios, seeds) -> list[dict]:
     celdas = []
     for n in n_reales:
         for s in seeds:
-            celdas.append({"n_real": n, "generador": SOLO_REAL,
-                           "ratio": 0.0, "n_synth": 0, "seed": s})
+            celdas.append({"n_real": n, "generador": SOLO_REAL, "ratio": 0.0, "seed": s})
         for r in ratios:
             if r == 0:
                 continue
             for g in generadores:
                 for s in seeds:
-                    celdas.append({"n_real": n, "generador": g, "ratio": float(r),
-                                   "n_synth": int(round(r * n)), "seed": s})
-    return sorted(celdas, key=lambda c: (c["n_real"], c["n_synth"]))
-
-
-def plan_de_curvas(n_reales, generadores, n_sinteticos, seeds) -> list[dict]:
-    """Plan con el presupuesto sintético en **conteo absoluto**, no en proporción.
-
-    Es el diseño que hace falta para la lectura "error frente al número de
-    reales": cada curva de la figura es un `n_synth` que se mantiene constante
-    mientras el eje x barre los reales. Con `plan_de_malla` eso es imposible,
-    porque allí `n_synth = ratio × n_real` cambia en cada punto de la curva.
-
-    El nivel `n_synth = 0` se resuelve con celdas de `SOLO_REAL`: es la curva
-    de referencia, la única compartida por todos los generadores.
-    """
-    celdas = []
-    for n in n_reales:
-        for ns in sorted(set(n_sinteticos)):
-            if ns == 0:
-                for s in seeds:
-                    celdas.append({"n_real": n, "generador": SOLO_REAL,
-                                   "ratio": 0.0, "n_synth": 0, "seed": s})
-                continue
-            for g in generadores:
-                for s in seeds:
-                    celdas.append({"n_real": n, "generador": g, "ratio": ns / n,
-                                   "n_synth": int(ns), "seed": s})
-    return sorted(celdas, key=lambda c: (c["n_real"], c["n_synth"]))
+                    celdas.append({"n_real": n, "generador": g, "ratio": r, "seed": s})
+    return sorted(celdas, key=lambda c: (c["n_real"], c["ratio"]))
 
 
 def ejecutar_malla(plan: list[dict], ruta_csv: Path, *, verbose: bool = True,
@@ -260,20 +204,14 @@ def ejecutar_malla(plan: list[dict], ruta_csv: Path, *, verbose: bool = True,
     ruta_csv = Path(ruta_csv)
     if ruta_csv.exists():
         hechas = pd.read_csv(ruta_csv)
-        clave = set(zip(hechas.n_real, hechas.generador, hechas.n_synth, hechas.seed))
+        clave = set(zip(hechas.n_real, hechas.generador, hechas.ratio, hechas.seed))
     else:
         hechas, clave = pd.DataFrame(columns=COLUMNAS), set()
         ruta_csv.parent.mkdir(parents=True, exist_ok=True)
         hechas.to_csv(ruta_csv, index=False)
 
-    # La clave es n_synth y no ratio: es la magnitud que las dos mallas
-    # comparten. Dentro de un mismo n_real ambas son biyectivas, así que los
-    # CSV escritos por la malla de ratios se siguen reanudando igual.
     pendientes = [c for c in plan
-                  if (c["n_real"], c["generador"],
-                      resolver_presupuesto(c["n_real"], c.get("ratio"),
-                                           c.get("n_synth"))[1],
-                      c["seed"]) not in clave]
+                  if (c["n_real"], c["generador"], c["ratio"], c["seed"]) not in clave]
     if verbose:
         print(f"Malla: {len(plan)} celdas | ya hechas: {len(plan) - len(pendientes)} | "
               f"pendientes: {len(pendientes)}")
@@ -286,9 +224,9 @@ def ejecutar_malla(plan: list[dict], ruta_csv: Path, *, verbose: bool = True,
             transcurrido = time.time() - t_inicio
             restante = transcurrido / i * (len(pendientes) - i)
             print(f"[{i:>3}/{len(pendientes)}] N={celda['n_real']:>6} "
-                  f"{celda['generador']:<16} synth={fila['n_synth']:>6} "
-                  f"s={celda['seed']} -> R² {fila['test_r2']:.4f} "
-                  f"({fila['segundos']:.0f}s) | ETA {restante/60:.0f} min")
+                  f"{celda['generador']:<16} r={celda['ratio']:<4} s={celda['seed']} "
+                  f"-> R² {fila['test_r2']:.4f} ({fila['segundos']:.0f}s) "
+                  f"| ETA {restante/60:.0f} min")
     return pd.read_csv(ruta_csv)
 
 
@@ -318,9 +256,8 @@ def delta_vs_solo_real(resumen: pd.DataFrame) -> pd.DataFrame:
     return out.sort_values(["n_real", "generador", "ratio"])
 
 
-def delta_pareado(df: pd.DataFrame, metrica: str = "test_r2",
-                  presupuesto: str = "ratio", mas_es_mejor: bool = True) -> pd.DataFrame:
-    """Delta **pareado por semilla** de `metrica`, con su significancia.
+def delta_pareado(df: pd.DataFrame) -> pd.DataFrame:
+    """Δ R² **pareado por semilla**, con su significancia.
 
     Por qué pareado y no diferencia de medias: la semilla fija el submuestreo
     de ventanas reales, así que comparar una celda contra la celda de solo-real
@@ -330,33 +267,22 @@ def delta_pareado(df: pd.DataFrame, metrica: str = "test_r2",
     notebook 02 con 102k ventanas: aplicar aquel umbral aquí declararía
     significativa casi cualquier diferencia. El pareado resuelve eso.
 
-    Devuelve, por (n_real, generador, `presupuesto`): media del delta, su
-    desviación, el error estándar y el estadístico t = media / error estándar.
-    Con solo 3 semillas se exige |t| >= 2,5 para hablar de efecto; por debajo,
-    la celda se declara no concluyente en lugar de inventar una conclusión.
-
-    Parámetros
-    ----------
-    metrica, mas_es_mejor
-        Qué columna se compara y en qué dirección. Por defecto `test_r2`, donde
-        más es mejor; para un error (`val_mse`, `test_mse`) hay que pasar
-        `mas_es_mejor=False` o el veredicto sale del revés.
-    presupuesto
-        La columna que identifica cuánto sintético lleva la celda: `ratio` para
-        la malla de proporciones, `n_synth` para la de conteos absolutos.
+    Devuelve, por (n_real, generador, ratio): media del delta, su desviación,
+    el error estándar y el estadístico t = media / error estándar. Con solo 3
+    semillas se exige |t| >= 2,5 para hablar de efecto; por debajo, la celda
+    se declara no concluyente en lugar de inventar una conclusión.
     """
     base = (df[df.generador == SOLO_REAL]
-            .set_index(["n_real", "seed"])[metrica].rename("base"))
+            .set_index(["n_real", "seed"])["test_r2"].rename("r2_base"))
     d = df[df.generador != SOLO_REAL].join(base, on=["n_real", "seed"])
-    d = d.assign(delta=d[metrica] - d["base"])
+    d = d.assign(delta=d.test_r2 - d.r2_base)
 
-    out = (d.groupby(["n_real", "generador", presupuesto])["delta"]
+    out = (d.groupby(["n_real", "generador", "ratio"])["delta"]
              .agg(delta_medio="mean", delta_sd="std", n_seeds="count").reset_index())
     out["ee"] = out.delta_sd / np.sqrt(out.n_seeds)
     out["t"] = out.delta_medio / out.ee.replace(0, np.nan)
-    mejora = out.delta_medio > 0 if mas_es_mejor else out.delta_medio < 0
     out["veredicto"] = np.where(out.t.abs() >= 2.5,
-                                np.where(mejora, "mejora", "empeora"),
+                                np.where(out.delta_medio > 0, "mejora", "empeora"),
                                 "no concluyente")
     return out
 
@@ -369,140 +295,3 @@ def umbral_ruido_por_n(df: pd.DataFrame) -> pd.Series:
     102k ventanas completas.
     """
     return df[df.generador == SOLO_REAL].groupby("n_real")["test_r2"].std()
-
-
-# --------------------------------------------------------------------------- #
-# Figuras: error frente al número de reales, por presupuesto sintético
-# --------------------------------------------------------------------------- #
-
-#: El color codifica el PRESUPUESTO SINTÉTICO, no el generador. Es la decisión
-#: que hace legibles las dos figuras: el generador se lee por panel (fig. 27) o
-#: por grosor de línea (fig. 28), y el color siempre significa lo mismo.
-_COLORES_SYNTH = ("blue", "orange", "green", "vermillion", "purple", "sky")
-
-
-def _serie_por_n_real(df: pd.DataFrame, generador: str, n_synth: int,
-                      metrica: str) -> pd.Series:
-    """Media sobre semillas de `metrica`, indexada por n_real.
-
-    El nivel n_synth=0 no lo produce ningún generador: es la celda de solo
-    real, y por eso se lee siempre de `SOLO_REAL` sea cual sea el generador
-    que se pida. Es lo que permite dibujar la misma curva de referencia en
-    los seis paneles.
-    """
-    g = SOLO_REAL if n_synth == 0 else generador
-    s = df[(df.generador == g) & (df.n_synth == n_synth)]
-    return s.groupby("n_real")[metrica].mean().sort_index()
-
-
-def _eje_n_real(ax, n_reales) -> None:
-    """Eje x logarítmico con los niveles reales como ticks, en miles legibles.
-
-    El LogLocator por defecto pondría 10³ y 10⁴, que no son los puntos que
-    hemos medido: el lector no sabría dónde cae N=3.000. Los ticks menores se
-    apagan **solo en x** (`minorticks_off` los apagaría también en y, y ahí
-    son los únicos que hay — ver `_eje_error`).
-    """
-    ax.set_xscale("log")
-    ax.set_xticks(list(n_reales))
-    ax.set_xticklabels([f"{n//1000}k" if n >= 1000 else str(n) for n in n_reales])
-    ax.xaxis.set_minor_locator(mticker.NullLocator())
-
-
-def _eje_error(ax, metrica: str) -> None:
-    """Eje y logarítmico etiquetado dentro de una sola década.
-
-    Todo el rango observado cae entre 0,35 y 0,8, así que no hay ni un tick
-    **mayor** (potencia de diez) dentro de la vista: con el formateo por defecto
-    el eje sale mudo. Se etiquetan los menores —0,4 · 0,5 · 0,6 · 0,8— que es
-    lo mismo que hace la gráfica de referencia.
-    """
-    ax.set_yscale("log")
-    ax.yaxis.set_minor_locator(mticker.LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1))
-    ax.yaxis.set_major_formatter(mticker.ScalarFormatter())
-    ax.yaxis.set_minor_formatter(mticker.ScalarFormatter())
-    ax.tick_params(axis="y", which="minor", labelsize=7)
-    ax.set_ylabel(f"{metrica} (escala log)")
-
-
-def plot_curvas_error_por_generador(df: pd.DataFrame, n_reales, n_sinteticos,
-                                    generadores, metrica: str = "val_mse",
-                                    ncols: int = 3) -> plt.Figure:
-    """Un panel por generador; una curva por presupuesto sintético absoluto.
-
-    Responde: para un presupuesto sintético dado, ¿cómo cae el error al
-    disponer de más datos reales, y qué generador lo hace caer más? La curva
-    de 0 sintéticos (solo real) se repite en los seis paneles: es la línea que
-    hay que batir, y verla en cada panel evita tener que cruzar la vista.
-    """
-    nrows = int(np.ceil(len(generadores) / ncols))
-    fig, axes = plt.subplots(nrows, ncols, figsize=(4.0 * ncols, 3.3 * nrows),
-                             sharex=True, sharey=True)
-    axes = np.atleast_1d(axes).ravel()
-    niveles = sorted(set(n_sinteticos))
-
-    for ax, gen in zip(axes, generadores):
-        for color, ns in zip(_COLORES_SYNTH, niveles):
-            s = _serie_por_n_real(df, gen, ns, metrica)
-            if not len(s):
-                continue
-            ax.plot(s.index, s.values, "o-", color=PALETTE[color],
-                    lw=1.4, ms=4, label=f"{ns:,} sintéticos".replace(",", "."))
-        ax.set_title(gen, fontsize=10)
-        _eje_error(ax, metrica)
-        _eje_n_real(ax, n_reales)
-        _style(ax)
-
-    for ax in axes[len(generadores):]:      # huecos si la rejilla no cuadra
-        ax.set_visible(False)
-    for ax in axes[len(generadores) - ncols:len(generadores)]:
-        ax.set_xlabel("ventanas reales disponibles")
-    for k, ax in enumerate(axes):       # el ylabel solo en la columna izquierda
-        if k % ncols:
-            ax.set_ylabel("")
-
-    manejadores, etiquetas = axes[0].get_legend_handles_labels()
-    fig.legend(manejadores, etiquetas, loc="lower center", ncol=len(niveles),
-               fontsize=8, frameon=False, bbox_to_anchor=(0.5, -0.04))
-    fig.suptitle("Error frente al número de reales, por presupuesto sintético")
-    fig.tight_layout()
-    return fig
-
-
-def plot_curvas_error_todos(df: pd.DataFrame, n_reales, n_sinteticos,
-                            generadores, metrica: str = "val_mse") -> plt.Figure:
-    """Los seis generadores en un solo eje, resumidos por presupuesto sintético.
-
-    Cada color es un presupuesto: seis líneas finas (un generador cada una) y
-    encima la **mediana** de las seis en grueso. Mediana y no media porque el
-    WGAN-GP colapsa en régimen de escasez y una media arrastraría el haz
-    entero; las líneas finas siguen mostrando esa cola sin dejar que la domine.
-    """
-    fig, ax = plt.subplots(figsize=(8.5, 5.0))
-    niveles = sorted(set(n_sinteticos))
-
-    for color, ns in zip(_COLORES_SYNTH, niveles):
-        series = [_serie_por_n_real(df, g, ns, metrica)
-                  for g in (["-"] if ns == 0 else generadores)]
-        series = [s for s in series if len(s)]
-        if not series:
-            continue
-        if ns > 0:                       # el haz: un generador por línea fina
-            for s in series:
-                ax.plot(s.index, s.values, "-", color=PALETTE[color],
-                        lw=0.9, alpha=0.35, zorder=1)
-        resumen_ns = pd.concat(series, axis=1).median(axis=1)
-        ax.plot(resumen_ns.index, resumen_ns.values, "o-", color=PALETTE[color],
-                lw=2.4, ms=5, zorder=3,
-                label=f"{ns:,} sintéticos".replace(",", "."))
-
-    _eje_error(ax, metrica)
-    _eje_n_real(ax, n_reales)
-    ax.set_xlabel("ventanas reales disponibles")
-    ax.set_title("TODOS — error frente al número de reales\n"
-                 "línea fina = un generador · línea gruesa = mediana de los seis",
-                 fontsize=11)
-    ax.legend(fontsize=8, title="presupuesto sintético", title_fontsize=8)
-    _style(ax)
-    fig.tight_layout()
-    return fig

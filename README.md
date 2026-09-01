@@ -6,10 +6,15 @@ de un modelo de predicción financiera, y qué generador los produce mejor?
 ## El problema
 
 Predicción de **volatilidad realizada a 21 días** (`y = ln σ_fwd`) a partir de una ventana
-de 60 retornos log diarios, por activo, sobre el universo S&P 1500 point-in-time
-(2012–2026) restringido a los activos **perfectamente mapeados** (auditoría
-`mapping_status == READY` y `status == OK` del maestro de identificadores del TFM:
-1.494 activos, 30 % de ellos delisted y retenidos hasta su salida real del índice).
+de 60 retornos log diarios, por activo, sobre el universo S&P 1500 (2012–2026) con doble
+filtro: activos **perfectamente mapeados** (auditoría `mapping_status == READY` y
+`status == OK` del maestro del TFM) **y con serie de precios completa** de la primera a la
+última fecha del panel, estén o no en el índice en cada momento (sin recorte por
+pertenencia; huecos internos ≤ 5 días). El filtro de serie completa descarta deslistados y
+listados tardíos, lo que introduce **sesgo de supervivencia de forma deliberada** — está
+documentado como limitación en el notebook 01 (§5), junto con la otra limitación
+estructural: un único split temporal (train ≤ 2021, val ≤ 2023, test ≤ 2026, con purga y
+embargo de 21 días), sin cross-validation walk-forward.
 
 Se entrenan varios modelos generativos sobre las ventanas reales de train, se generan
 datasets sintéticos y se entrena la misma arquitectura downstream con distintas mezclas
@@ -29,32 +34,21 @@ taller_b5t1/
 │   ├── models.py              #   arquitecturas candidatas del modelo downstream
 │   ├── training.py            #   harness único de entrenamiento (clipping, cosine, best-state)
 │   ├── generators.py          #   los 6 generadores (3 baselines + VAE, WGAN-GP, RealNVP)
-│   ├── gen_audit.py           #   auditoría de FIDELIDAD (hechos estilizados, KS/W1, corr)
-│   ├── gen_utility.py         #   auditoría de UTILIDAD (TSTR frente a TRTR)
-│   ├── malla.py               #   barrido real×sintético, reanudable con checkpoint
-│   └── netviz.py              #   diagramas de arquitectura derivados de los nn.Module
+│   ├── gen_audit.py           #   auditoría de generadores contra los hechos estilizados
+│   └── malla.py               #   barrido real×sintético, reanudable con checkpoint
 ├── notebooks/
 │   ├── 01_datos_y_eda.ipynb          # datos, preprocesamiento y EDA crítico
 │   ├── 02_downstream_baselines.ipynb # baselines + arquitectura downstream congelada
-│   ├── 03_generadores.ipynb          # generadores, convergencia y auditoría (fidelidad+utilidad)
+│   ├── 03_generadores.ipynb          # generadores, curvas de convergencia y auditoría
 │   └── 04_malla_sintetica.ipynb      # malla real×sintético y contraste de hipótesis
 ├── data/processed/            # artefactos generados (VERSIONADOS: 16 MB)
 │   ├── windows_dataset.npz           #   X/y de train, val y test (sin estandarizar)
 │   ├── windows_meta.parquet          #   cik, sector, fechas y split de cada ventana
 │   ├── standardizer.json             #   estadísticos de estandarización (solo train)
 │   ├── downstream_reference.json     #   arquitectura congelada + métricas de referencia
-│   ├── downstream_reference.pt       #   pesos de la campeona
-│   ├── auditoria_nb03.csv            #   tabla de fidelidad de los 6 generadores
-│   └── tstr_nb03.csv                 #   utilidad TSTR/TRTR, una fila por brazo y semilla
+│   └── downstream_reference.pt       #   pesos de la campeona
 ├── reports/figures/           # figuras exportadas por los notebooks (versionadas)
-│   └── tex/                   #   fuente TikZ y PDF vectorial de los diagramas 16-23
-├── vendor/PlotNeuralNet/      # PlotNeuralNet (MIT), vendorizado: no está en PyPI
-├── tests/
-│   ├── test_netviz.py         # pruebas de los diagramas (no requieren LaTeX)
-│   └── test_gen_audit.py      # pruebas de las métricas de fidelidad (sin GPU, segundos)
-├── scripts/
-│   ├── run_all.py             # ejecuta todos los notebooks de principio a fin
-│   └── make_arch_figures.py   # regenera los diagramas de arquitectura
+├── scripts/run_all.py         # ejecuta todos los notebooks de principio a fin
 ├── pyproject.toml             # entorno uv (torch desde el índice cu128)
 ├── requirements.txt           # ruta pip, para quien no use uv y para Colab
 └── .python-version            # Python 3.13
@@ -128,36 +122,6 @@ Ejecuta cada notebook in-place y regenera todas las figuras de `reports/figures/
 punto de entrada de reproducibilidad que pide el enunciado. En CPU tarda bastante (el
 notebook 03 entrena tres redes generativas); en GPU, uno o dos órdenes de magnitud menos.
 
-### Diagramas de arquitectura
-
-Las figuras 16–23 de `reports/figures/` son las fichas visuales de las redes: las cuatro
-candidatas downstream, los tres generadores neuronales y el pipeline de datos. Se dibujan
-con [PlotNeuralNet](https://github.com/HarisIqbal88/PlotNeuralNet) (MIT), vendorizado en
-`vendor/PlotNeuralNet/` porque no está publicado en PyPI.
-
-```bash
-uv run python scripts/make_arch_figures.py           # solo lo que haya cambiado
-uv run python scripts/make_arch_figures.py --force   # recompila las ocho
-uv run python scripts/make_arch_figures.py --list    # ver qué genera
-```
-
-**No son dibujos.** `src/netviz.py` recorre los `nn.Module` de verdad y calcula cada cifra
-con la aritmética real de la convolución y el pooling: la cadena 60 → 30 → 15 → 7 de la CNN
-campeona no está escrita en ninguna parte. En un repo cuya tesis es *"la arquitectura queda
-congelada y solo cambian los datos"*, una figura capaz de desviarse en silencio del código
-sería una mentira documental. Por lo mismo, el sello **CONGELADA** se decide leyendo
-`downstream_reference.json`, y el notebook 03 pasa sus generadores ya entrenados para que
-el diagrama describa lo que se ejecutó y no los valores por defecto de las clases.
-
-**LaTeX es una dependencia opcional.** La compilación necesita `pdflatex` (MiKTeX en
-Windows, TeX Live en Linux/macOS) y `pdftoppm` para el PNG. Sin ellos no se rompe nada: los
-`.png` y los `.tex` van versionados, y tanto el script como las celdas de los notebooks
-avisan y reutilizan la figura cacheada. `scripts/run_all.py` sigue funcionando igual.
-
-```bash
-uv run pytest tests/ -q      # las pruebas de netviz NO necesitan LaTeX
-```
-
 ### Notebook 01: datos crudos
 
 Solo el notebook 01 necesita los ficheros originales del TFM
@@ -212,44 +176,25 @@ personas no se pisen:
   estabiliza sin tocar el objetivo — winsorizar habría cambiado el problema.
 - **Generadores del par conjunto `[X | y]`** (opción OPT2 de las transparencias): generar
   solo `X` obligaría a etiquetar después con otro modelo, contaminando el experimento.
-- **Auditoría de generadores previa al downstream**, en los dos ejes que el marco estándar
-  de datos sintéticos exige. **Fidelidad**: colas, clustering, apalancamiento, preservación
-  de corr(X,y), distancias marginales (KS y Wasserstein), distancia entre matrices de
-  correlación y discriminative AUC. **Utilidad**: TSTR frente a TRTR. Sin la primera no se
-  puede distinguir un generador que ayuda por realismo de otro que ayuda por mera
-  regularización; sin la segunda, parecerse al dato real se confunde con servir para
-  entrenar — y el jitter demuestra que no es lo mismo.
-- **Privacidad, fuera de alcance y declarado como tal**: los datos de partida son precios de
-  mercado públicos, no registros personales, así que no hay secreto que filtrar. En un caso
-  de uso con datos de clientes esa tercera auditoría (duplicados, vecinos más cercanos,
-  inferencia de membresía, presupuesto DP) sería obligatoria.
+- **Auditoría de generadores previa al downstream**: colas, clustering, apalancamiento,
+  preservación de corr(X,y) y discriminative AUC. Sin ella no se puede distinguir un
+  generador que ayuda por realismo de otro que ayuda por mera regularización.
 
 ## Resultados hasta ahora
 
 **Modelo downstream congelado** (notebook 02): CNN 1-D de 68k parámetros, R² en test
 0,456 ± 0,006 (3 semillas), frente a 0,359 de HAR-RV y 0,120 de persistencia.
 
-**Auditoría de generadores** (notebook 03; referencia real: curtosis 25,2 · ACF|r| 0,062).
-Dos ejes: **fidelidad** (¿se parecen?) y **utilidad** (¿sirven para entrenar?). El ratio
-TSTR/TRTR es el R² de un modelo entrenado **solo con sintético** dividido por el del mismo
-modelo entrenado con las 102k ventanas reales; 1,0 sería conservar toda la información.
+**Auditoría de generadores** (notebook 03; referencia real: curtosis 25,2 · ACF|r| 0,062):
 
-| Generador | Curtosis | ACF\|r\| lag1 | AUC discrim. | W1 por columna | ratio TSTR/TRTR |
-|---|---:|---:|---:|---:|---:|
-| jitter | 23,6 | 0,058 | 0,50 | 0,026 | 0,91 |
-| gaussiana | 0,03 | −0,015 | 0,96 | 0,236 | **−0,36** |
-| block_bootstrap | 26,2 | 0,125 | 0,76 | 0,057 | 0,64 |
-| VAE | 1,43 | −0,006 | 0,89 | 0,158 | 0,61 |
-| WGAN-GP | 4,43 | −0,013 | 0,83 | 0,095 | **−0,21** |
-| **RealNVP** | **23,2** | **0,042** | **0,65** | **0,057** | **0,89** |
-
-> **Dos de los seis generadores tienen utilidad negativa.** Un modelo entrenado con las
-> muestras de la gaussiana o del WGAN-GP es *peor que predecir la media constante*. La
-> fidelidad no es un lujo estético: un generador que no reproduce las colas no es neutro,
-> es tóxico. Y el WGAN-GP es el caso más instructivo — su pérdida converge limpiamente y su
-> modelo downstream entrena 35 épocas mejorando contra su propia validación sintética, para
-> aterrizar en R² −0,04 sobre datos reales. **Converger sobre datos sintéticos no dice nada
-> sobre la utilidad real.**
+| Generador | Curtosis | ACF\|r\| lag1 | AUC discrim. |
+|---|---:|---:|---:|
+| jitter | 23,6 | 0,058 | 0,51 |
+| gaussiana | 0,03 | −0,015 | 0,96 |
+| block_bootstrap | 26,2 | 0,125 | 0,76 |
+| VAE | 1,62 | −0,007 | 0,90 |
+| WGAN-GP | 5,10 | −0,012 | 0,81 |
+| **RealNVP** | **13,9** | **0,046** | **0,65** |
 
 **Malla real×sintético** (notebook 04; 117 celdas, Δ R² pareado por semilla):
 
@@ -265,30 +210,6 @@ sin mirar el modelo downstream, **ordena perfectamente** a los seis generadores 
 ganancia real (Spearman −1,00 con N=1.000). Se puede elegir generador midiendo fidelidad,
 en minutos, en lugar de barrer una malla entera.
 
-La ampliación de la auditoría refuerza ese resultado y lo abarata. El notebook 04 cruza ahora
-**ocho** métricas del 03 —leídas de `auditoria_nb03.csv`, no copiadas a mano— contra la
-ganancia pareada de la malla:
-
-| Métrica medida en el nb03 | N=250 | N=1.000 | N=3.000 | todos |
-|---|---:|---:|---:|---:|
-| **ratio TSTR/TRTR** (utilidad) | +0,71 | **+0,94** | +0,89 | **+0,94** |
-| discriminative AUC | −0,54 | **−1,00** | −0,77 | −0,83 |
-| **Wasserstein por columna** | −0,54 | **−1,00** | −0,77 | −0,83 |
-| **corr(X,X) en rangos** | **−0,83** | −0,83 | −0,83 | **−0,89** |
-| curtosis · ACF de \|r\| | +0,14 · +0,31 | +0,83 · +0,77 | +0,60 · +0,71 | +0,66 · +0,77 |
-| corr(X,X) en Pearson · err_corr(X,y) | −0,20 | +0,14 | +0,26 | +0,14 |
-
-Tres lecturas. **La utilidad TSTR es el mejor predictor de todos (+0,94)**: entrenar el
-modelo solo con sintético —4 minutos— anticipa el orden que la malla de 117 celdas
-establece, con una sola inversión y entre dos generadores que la propia malla declara no
-concluyentes. La **Wasserstein por columna reproduce al discriminative AUC cifra por cifra**
-siendo gratis (60 ordenaciones frente a entrenar un clasificador). Y las métricas de
-dependencia **ingenuas engañan**: `err_corr(X,y)` y la correlación de Pearson entre
-posiciones dan ambas +0,14, con el signo equivocado, porque la gaussiana reproduce la
-covarianza por construcción y aprueba esa columna sin merecerlo; solo la versión en **rangos**
-informa —y es la única métrica que **sobrevive al régimen de N=250**, donde todas las demás
-se desmoronan.
-
 ---
 
 El flow es el mejor generador neuronal en los tres ejes, pero **sobreajusta**: su ventaja
@@ -298,10 +219,15 @@ menos de lo que su ajuste sugiere. Parecerse a train no garantiza generalizar.
 
 ## Estado
 
+> **Nota (31/08).** Revisión mayor en curso: universo de serie completa, arquitecturas
+> downstream más profundas (cnn_bn / tcn / gru, finalistas a 300 épocas), más épocas en los
+> generadores neuronales y malla de ratios hasta 30x. Los números del bloque anterior
+> corresponden a la ejecución previa y se actualizarán tras `python scripts/run_all.py`.
+
 | Fase | Estado |
 |---|---|
 | 01 · Datos, preprocesamiento y EDA crítico | ✅ |
 | 02 · Arquitectura downstream y baselines no generativos | ✅ |
 | 03 · Generadores (baselines simples + familias neuronales) | ✅ |
-| 04 · Malla real×sintético y análisis de resultados | ✅ (malla REDUCIDA: 117 celdas) |
+| 04 · Malla real×sintético hasta ratio 30x | 🔁 re-ejecución en curso (malla RATIO30: 111 celdas) |
 | 05 · Presentación (PDF) | pendiente |

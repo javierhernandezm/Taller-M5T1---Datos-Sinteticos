@@ -16,12 +16,18 @@ no de modelado:
     cobertura de precios del tramo es completa. Es la definición operativa
     de "activo perfectamente mapeado".
 
-2.  Recorte point-in-time por tramo de pertenencia. Cada fila de precios
-    de un activo solo se conserva dentro de [analysis_start, analysis_end]
-    de su tramo de pertenencia al S&P 1500. Así el dataset reproduce lo que
-    un inversor podía observar del índice en cada fecha y se evita el sesgo
-    de supervivencia: los activos excluidos de cotización (delisted)
-    permanecen en el panel hasta su salida real.
+2.  Filtro de serie completa (cfg.serie_completa = True, el modo del taller).
+    Se conservan SOLO los activos con histórico de precios completo de la
+    primera a la última fecha del panel, estén o no en el índice en cada
+    momento: nada de recorte por pertenencia, y fuera deslistados y listados
+    tardíos. "Completa" = empieza a más tardar tolerancia_bordes_dias tras el
+    inicio del panel, termina como muy pronto esa tolerancia antes del final,
+    y sin huecos internos > max_gap_days días naturales.
+    ADVERTENCIA deliberada: este filtro introduce sesgo de supervivencia
+    (solo empresas que sobrevivieron todo el periodo). Se acepta a cambio de
+    un panel rectangular y homogéneo, y queda documentado como limitación en
+    el notebook 01. Con serie_completa = False se recupera el comportamiento
+    anterior (recorte PIT por tramo, deslistados incluidos).
 
 3.  El identificador de trabajo es el CIK (texto de 10 dígitos). En el
     universo filtrado la relación CIK↔activo↔RIC es 1:1:1 (verificado en
@@ -119,12 +125,42 @@ def load_prices(cfg: Config, universe: pd.DataFrame) -> pd.DataFrame:
     px = px[px["cik"].isin(set(universe["cik"]))]
     n1 = len(px)
 
-    # merge por cik y filtrado por rango de fechas del tramo -----------------
-    spells = universe[["cik", "spell_id", "analysis_start", "analysis_end"]]
-    px = px.merge(spells, on="cik", how="left")
-    in_spell = (px["date"] >= px["analysis_start"]) & (px["date"] <= px["analysis_end"])
-    px = px.loc[in_spell].drop(columns=["analysis_start", "analysis_end"])
-    n2 = len(px)
+    if cfg.serie_completa:
+        # --- Filtro de serie completa (sin recorte por pertenencia) --------
+        # Nos quedamos con los activos que cotizan de punta a punta del panel
+        # y sin huecos internos. Un único "tramo" por activo (spell_id = 0).
+        tol = pd.Timedelta(days=cfg.tolerancia_bordes_dias)
+        cal_ini, cal_fin = px["date"].min(), px["date"].max()
+
+        px = px.sort_values(["cik", "date"])
+        g = px.groupby("cik")["date"]
+        rango = g.agg(ini="min", fin="max")
+        # hueco interno máximo (días naturales) entre sesiones consecutivas
+        rango["hueco_max"] = g.diff().dt.days.groupby(px["cik"]).max()
+
+        empieza_a_tiempo = rango["ini"] <= cal_ini + tol
+        llega_al_final = rango["fin"] >= cal_fin - tol
+        sin_huecos = rango["hueco_max"] <= cfg.max_gap_days
+        completos = rango.index[empieza_a_tiempo & llega_al_final & sin_huecos]
+
+        print(
+            f"[serie completa] panel {cal_ini.date()} -> {cal_fin.date()} | "
+            f"{len(rango)} activos candidatos: "
+            f"{int((~empieza_a_tiempo).sum())} listados tarde, "
+            f"{int((~llega_al_final).sum())} deslistados/terminan antes, "
+            f"{int((empieza_a_tiempo & llega_al_final & ~sin_huecos).sum())} con huecos "
+            f"> {cfg.max_gap_days} dias -> {len(completos)} con serie completa"
+        )
+        px = px[px["cik"].isin(set(completos))].copy()
+        px["spell_id"] = 0
+        n2 = len(px)
+    else:
+        # merge por cik y filtrado por rango de fechas del tramo (modo PIT) --
+        spells = universe[["cik", "spell_id", "analysis_start", "analysis_end"]]
+        px = px.merge(spells, on="cik", how="left")
+        in_spell = (px["date"] >= px["analysis_start"]) & (px["date"] <= px["analysis_end"])
+        px = px.loc[in_spell].drop(columns=["analysis_start", "analysis_end"])
+        n2 = len(px)
 
     n_null = int(px["close"].isna().sum())
     px = px.dropna(subset=["close"])
@@ -134,9 +170,10 @@ def load_prices(cfg: Config, universe: pd.DataFrame) -> pd.DataFrame:
     assert not px.duplicated(["cik", "date"]).any(), "Duplicados (cik, date) en precios"
 
     px = px.sort_values(["cik", "date"]).reset_index(drop=True)
+    filtro = "serie completa" if cfg.serie_completa else "recorte PIT por tramo"
     print(
         f"[prices] {n0:,} filas totales -> {n1:,} en universo filtrado -> "
-        f"{n2:,} tras recorte PIT por tramo -> {len(px):,} tras eliminar "
+        f"{n2:,} tras {filtro} -> {len(px):,} tras eliminar "
         f"{n_null} cierres nulos"
     )
     return px
