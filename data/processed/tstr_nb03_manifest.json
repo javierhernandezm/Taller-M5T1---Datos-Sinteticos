@@ -1,0 +1,18 @@
+{
+  "representation": "R61 = [X60 | y]",
+  "fit_seed": 42,
+  "sample_and_downstream_seeds": [
+    42,
+    43,
+    44
+  ],
+  "train_steps": 3000,
+  "sample_steps": 50,
+  "n_train": 102406,
+  "downstream_recipe": "f16761a9",
+  "protocol": "one generator fit; three sample/downstream seeds",
+  "experiment_id": "29155568ab",
+  "checkpoint_sha1": "704d10f68e969c855416bbc5825d1bbb3e4d0564",
+  "complete": true,
+  "rows": 21
+}

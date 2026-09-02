@@ -328,22 +328,22 @@
     { id:"s_netviz", col:3, y:425, type:"script", title:"netviz.py",
       sub:"src/ · importado por 02_downstream_baselines y 03_generadores", stat:"10 diagramas · PlotNeuralNet (TikZ)",
       detail:{
-        que:"Genera las fichas visuales de las redes (las 6 candidatas downstream, los 3 generadores neuronales y el pipeline de datos) recorriendo los nn.Module reales. Compila TikZ con PlotNeuralNet (MIT, vendorizado en vendor/ porque no está en PyPI); pdflatex es opcional — sin él se avisa y se reutiliza el PNG ya versionado.",
-        list:["bloques_desde_modelo","diagrama_vae","diagrama_wgan","diagrama_realnvp","diagrama_pipeline","render"],
+        que:"Genera las fichas visuales de las redes (las 6 candidatas downstream, los 3 generadores neuronales y el pipeline de datos) recorriendo los nn.Module reales. Compila TikZ con PlotNeuralNet; pdflatex es opcional: reutiliza la caché y, para una figura nueva, genera un PNG equivalente con Matplotlib.",
+        list:["bloques_desde_modelo","diagrama_vae","diagrama_diffusion_ts","diagrama_realnvp","diagrama_pipeline","render"],
         nota:"El notebook 03 le pasa los generadores YA ENTRENADOS (no los valores por defecto de las clases): RealNVP se entrena con n_layers=6, no con el 8 por defecto — dibujar el default habría inventado dos capas inexistentes." } },
 
     { id:"n9", col:3, y:520, type:"proc", title:"03_generadores.ipynb",
       sub:"usa generators · gen_audit · gen_utility · training · eda · netviz", stat:"6 generadores, auditados",
       detail:{
-        que:"Entrena y audita 6 generadores de la distribución conjunta [X | y] sobre las 102.406 ventanas de train: jitter, gaussiana, block bootstrap, VAE, WGAN-GP y RealNVP. La auditoría cubre los dos ejes que este caso de uso exige: <strong>fidelidad</strong> (¿se parecen al dato real?) y <strong>utilidad</strong> (¿sirven para entrenar?). No persiste muestras —el 04 las recrea— pero sí sus dos tablas de resultados.",
-        stats:[["RealNVP — AUC · TSTR","0,65 · 0,95 (mejor red)"],["jitter — AUC · TSTR","0,50 · 0,92"],["gaussiana — AUC · TSTR","0,96 · −0,39 (peor)"],["WGAN-GP — TSTR","+0,25"]],
+        que:"Entrena y audita 6 generadores de la distribución conjunta [X | y] sobre las 102.406 ventanas de train: jitter, gaussiana, block bootstrap, VAE, Diffusion-TS R61 y RealNVP. La auditoría cubre <strong>fidelidad</strong> y <strong>utilidad</strong>; R61 mantiene exactamente la misma información de entrada que los rivales.",
+        stats:[["Diffusion-TS — AUC · TSTR","0,78 · 0,947 (mejor TSTR)"],["RealNVP — AUC · TSTR","0,66 · 0,947"],["jitter — AUC · TSTR","0,51 · 0,923"],["gaussiana — AUC · TSTR","0,96 · −0,388"]],
         nota:"El tercer eje del marco de auditoría, la <strong>privacidad</strong>, queda fuera de alcance y así se declara en el notebook: son precios de mercado públicos, no registros personales, de modo que no hay secreto que un generador pueda filtrar. Y los generadores se reajustan desde cero en cada celda de la malla del 04 — este notebook publica cifras, no pesos reutilizables." } },
 
-    { id:"s_generators", col:3, y:650, type:"script", title:"generators.py",
-      sub:"src/ · importado por 03_generadores", stat:"6 clases · fit() / sample()",
+    { id:"s_generators", col:3, y:650, type:"script", title:"generators.py + diffusion_ts.py",
+      sub:"src/ · importado por 03_generadores", stat:"R61 activo · fit() / sample()",
       detail:{
-        que:"Los seis generadores de ventanas sintéticas [X | y], todos con la misma interfaz fit()/sample() para que el notebook 04 pueda barrer la malla sin condicionales por modelo.",
-        list:["JitterGenerator","GaussianGenerator","BlockBootstrapGenerator","VAEGenerator","WGANGPGenerator","RealNVPGenerator"] } },
+        que:"Los seis generadores activos de ventanas sintéticas [X60 | y], todos con la misma interfaz fit()/sample(). Diffusion-TS separa los 60 tokens temporales del token target; la clase WGAN permanece solo para reproducir el histórico.",
+        list:["JitterGenerator","GaussianGenerator","BlockBootstrapGenerator","VAEGenerator","DiffusionTSR61Generator","RealNVPGenerator"] } },
 
     { id:"s_gen_audit", col:3, y:720, type:"script", title:"gen_audit.py",
       sub:"src/ · importado por 03_generadores", stat:"KS · Wasserstein · corr(X,X) · AUC",
@@ -379,8 +379,8 @@
     { id:"n13", col:4, y:440, type:"fig", title:"9 figuras",
       sub:"reports/figures/ · 11–13, 20–22, 24–26", stat:"convergencia · marginales · Q-Q · colas · TSTR",
       detail:{
-        que:"Curvas de convergencia de VAE / WGAN-GP / RealNVP, marginales real-vs-sintético en escala log y ventanas sintéticas de muestra (11–13); los diagramas de esas tres redes, generados por netviz.py a partir de los generadores YA ENTRENADOS en esta misma celda (20–22); y la auditoría ampliada (24–26).",
-        list:["11_convergencia_generadores.png","12_marginales_generadores.png","13_ventanas_sinteticas.png","20_arq_vae.png","21_arq_wgan_gp.png","22_arq_realnvp.png","24_qq_generadores.png","25_ecdf_colas.png","26_utilidad_tstr.png"],
+        que:"Curvas de convergencia de VAE / Diffusion-TS / RealNVP, marginales real-vs-sintético y ventanas sintéticas (11–13); los diagramas de esas tres redes (20–22); y la auditoría ampliada (24–26).",
+        list:["11_convergencia_generadores.png","12_marginales_generadores.png","13_ventanas_sinteticas.png","20_arq_vae.png","21_arq_diffusion_ts.png","22_arq_realnvp.png","24_qq_generadores.png","25_ecdf_colas.png","26_utilidad_tstr.png"],
         nota:"Las tres nuevas dicen <em>dónde</em> se rompe cada generador, no solo cuánto: el Q-Q de dos muestras (24) hace visible el aplanamiento de las colas, la supervivencia en log-log (25) convierte la ley de potencias en una recta que el generador acompaña o abandona, y el veredicto TSTR (26) cruza fidelidad contra utilidad." } },
 
     { id:"n19", col:4, y:600, type:"data", title:"auditoria_nb03.csv",
@@ -394,7 +394,7 @@
       sub:"data/processed/ · 2 KB + 1 KB", stat:"21 filas — 7 brazos × 3 semillas",
       detail:{
         que:"El resultado bruto de la auditoría de utilidad: un brazo TRTR (datos reales) y seis TSTR (uno por generador), cada uno con tres semillas. El fichero de resumen agrega por brazo y añade el ratio TSTR/TRTR.",
-        stats:[["TRTR — referencia","R² 0,504 ± 0,008"],["mejor generador","RealNVP — ratio 0,947"],["jitter","ratio 0,923"],["utilidad negativa","gaussiana −0,388"]],
+        stats:[["TRTR — referencia","R² 0,504 ± 0,008"],["mejor TSTR","Diffusion — 0,9472 (empate)"],["RealNVP","0,9467"],["utilidad negativa","gaussiana −0,388"]],
         nota:"El notebook recalcula los 21 brazos completos cuando cambia la campeona: la clave de una reanudación simple no contiene la arquitectura y podría mezclar resultados de dos modelos downstream." } },
 
     { id:"s_malla", col:5, y:210, type:"script", title:"malla.py",
@@ -407,8 +407,8 @@
       sub:"usa malla · training · eda", stat:"333 ratios + 465 curvas",
       detail:{
         que:"Ejecuta dos vistas complementarias. RATIOS_FINOS barre seis proporciones sintético/real entre 0,25× y 5× con N_real=250, 1.000 y 3.000; la malla de curvas fija entre 500 y 20.000 sintéticos y recorre cinco niveles de reales hasta 20.000. En cada celda el generador se reajusta solo con el real disponible y la GRU congelada se evalúa contra dato real.",
-        stats:[["RATIOS_FINOS","333 celdas · 3 N · 6 ratios · 3 semillas"],["curvas absolutas","465 celdas · 5 N · 5 presupuestos · 3 semillas"],["veredictos ratios","14 mejoran · 8 empeoran · 86 n/c"],["mejor predictor","corr(X,X) en rangos · Spearman −0,89"]],
-        nota:"Hallazgo central: con 250 y 1.000 ventanas la inestabilidad entre semillas domina; 13 de las 14 mejoras aparecen con 3.000 reales. RealNVP y jitter concentran la señal positiva, mientras la gaussiana empeora al aumentar su peso. No aparece un óptimo interior: el signo lo fija la fidelidad del generador." } },
+        stats:[["RATIOS_FINOS","333 celdas · 3 N · 6 ratios · 3 semillas"],["curvas absolutas","465 celdas · 5 N · 5 presupuestos · 3 semillas"],["veredictos ratios","21 mejoran · 7 empeoran · 80 n/c"],["Diffusion ratios","7 mejora · 0 empeora · 11 n/c"]],
+        nota:"Diffusion sustituye claramente al WGAN histórico y empata globalmente con RealNVP/jitter. La señal más estable aparece con 3.000 reales; con 10.000–20.000 el beneficio se reduce a milésimas. No aparece un óptimo interior estable dentro del rango probado." } },
 
     { id:"n15", col:6, y:70, type:"data", title:"malla_ratios_finos.csv",
       sub:"data/processed/ · 41 KB", stat:"333 filas — una por celda",
@@ -424,8 +424,8 @@
     { id:"n17", col:6, y:310, type:"data", title:"malla_ratios_finos_delta.csv",
       sub:"data/processed/ · 13 KB", stat:"108 Δ R² medios vs. solo real",
       detail:{
-        que:"Diferencia entre el R² medio de cada mezcla y el R² medio de solo-real para el mismo N. El notebook hace además el contraste pareado por semilla —no persistido en este CSV— y exige |t| ≥ 2,5 para emitir veredicto.",
-        stats:[["comparaciones agregadas","108"],["pareado: mejoran","14"],["pareado: empeoran","8"],["pareado: no concluyentes","86"]] } },
+        que:"Diferencia entre el R² medio de cada mezcla y el R² medio de solo-real para el mismo N. El contraste por semilla se persiste además en malla_ratios_finos_delta_pareado.csv y exige |t| ≥ 2,5 para emitir veredicto.",
+        stats:[["comparaciones agregadas","108"],["pareado: mejoran","21"],["pareado: empeoran","7"],["pareado: no concluyentes","80"]] } },
 
     { id:"n21", col:6, y:430, type:"data", title:"malla_curvas.csv",
       sub:"data/processed/ · 59 KB", stat:"465 filas · presupuesto absoluto",
@@ -689,16 +689,14 @@
     panel.innerHTML =
       '<div class="intro">' +
       "<h3>El hallazgo del taller</h3>" +
-      "<p>Los datos sintéticos <strong>sí</strong> mejoran el modelo downstream, pero solo por " +
-      "encima de un umbral mínimo de datos reales (entre 250 y 1.000 ventanas) y solo si el " +
-      "generador reproduce las colas. Por debajo de ese umbral —o con un generador que " +
-      "gaussianiza la distribución— el dato sintético <strong>empeora</strong> el modelo. " +
-      "El generador más sofisticado (WGAN-GP) es el más peligroso con pocos datos; el más " +
-      "trivial (jitter, ruido sobre datos reales) nunca hace daño.</p>" +
-      "<p>La auditoría de utilidad lo dice sin rodeos: entrenar <em>solo</em> con las muestras " +
-      "de la gaussiana o del WGAN-GP produce un modelo <strong>peor que predecir la media " +
-      "constante</strong>. La fidelidad no es un lujo estético — un generador que no reproduce " +
-      "las colas no es neutro, es tóxico.</p>" +
+      "<p><strong>Diffusion-TS R61 sí merece sustituir al WGAN-GP</strong>: conserva el 94,7 % " +
+      "de la utilidad TRTR y mejora al WGAN histórico en +0,352 R² TSTR. En las dos mallas " +
+      "gana 52/54 y 69/75 comparaciones pareadas frente a él.</p>" +
+      "<p>No es un campeón absoluto. Empata globalmente con RealNVP y jitter, mientras " +
+      "RealNVP reproduce mejor la escala y el clustering. La ventaja de Diffusion es más " +
+      "clara alrededor de 3.000 ventanas reales; con 10.000–20.000 se reduce a milésimas. " +
+      "La auditoría sirve para descartar generadores tóxicos, pero entre candidatos fuertes " +
+      "la decisión exige la malla completa.</p>" +
       '<p class="hint">Toca cualquier nodo del grafo para ver de dónde viene y a dónde va.</p>' +
       "</div>";
   }

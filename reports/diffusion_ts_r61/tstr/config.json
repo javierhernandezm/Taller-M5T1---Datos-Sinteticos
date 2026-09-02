@@ -1,0 +1,13 @@
+{
+  "representation": "R61",
+  "train_steps": 3000,
+  "sample_steps": 50,
+  "n_train": 102406,
+  "seeds": [
+    42,
+    43,
+    44
+  ],
+  "posthoc_variance_scaling": false,
+  "experiment_id": "7e328663c8"
+}

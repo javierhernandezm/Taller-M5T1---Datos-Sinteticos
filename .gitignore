@@ -26,3 +26,14 @@ notebooks/run_nb*.log
 *.fdb_latexmk
 *.synctex.gz
 reports/figures/tex/*.log
+
+# El experimento exploratorio R81 no se versiona. La regla cubre la carpeta
+# entera, no solo checkpoints/synthetic: sus .pt y .npy llegaron a estar
+# trackeados (87 MB) porque .gitignore no destrackea lo ya anadido, y un
+# `git add -A` volvia a incorporarlos. Recuperable desde el historial.
+reports/diffusion_ts_experiment/
+
+# Artefactos pesados y reproducibles del experimento Diffusion-TS R61. Las
+# métricas y el informe sí se versionan; checkpoints y matrices sintéticas, no.
+reports/diffusion_ts_r61/**/checkpoints/
+reports/diffusion_ts_r61/**/synthetic/

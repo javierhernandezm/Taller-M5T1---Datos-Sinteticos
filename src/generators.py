@@ -23,8 +23,11 @@ Baselines sin red neuronal (§1 del enunciado: "un cuarto modelo simple"):
 
 Redes neuronales (las tres familias distintas que pide el enunciado):
   * VAEGenerator          autoencoder variacional (latente variacional)
-  * WGANGPGenerator       Wasserstein GAN con gradient penalty (adversarial)
+  * DiffusionTSR61Generator difusión temporal sobre [X60 | y] (difusión)
   * RealNVPGenerator      normalizing flow con verosimilitud exacta (biyectiva)
+
+``WGANGPGenerator`` se conserva para reproducir los resultados históricos,
+pero deja de formar parte de la terna activa tras la investigación comparativa.
 
 Cada red expone además `history_` (listas de pérdidas por época) para poder
 dibujar las curvas de convergencia que exige el enunciado.
@@ -38,12 +41,13 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from .diffusion_ts import DiffusionTSR61Generator
 from .training import get_device
-
 
 # =========================================================================== #
 # Interfaz común
 # =========================================================================== #
+
 
 class BaseGenerator(ABC):
     """Contrato mínimo: fit(XY) y sample(n) -> (n, D)."""
@@ -60,9 +64,18 @@ class BaseGenerator(ABC):
     history_: dict[str, list[float]]
 
 
+# Diffusion-TS vive en su propio módulo porque arrastra el denoiser, el
+# calendario de ruido y el muestreo DDIM; heredar de `BaseGenerator` crearía un
+# ciclo de imports (este módulo ya importa de `diffusion_ts`). El registro como
+# subclase virtual deja el contrato explícito: `isinstance(gen, BaseGenerator)`
+# vale para los seis generadores activos, no solo para los cinco de aquí.
+BaseGenerator.register(DiffusionTSR61Generator)
+
+
 # =========================================================================== #
 # 1. Baselines sin red
 # =========================================================================== #
+
 
 class JitterGenerator(BaseGenerator):
     """Muestras reales + ruido gaussiano isotrópico.
@@ -88,7 +101,10 @@ class JitterGenerator(BaseGenerator):
         rng = np.random.default_rng(seed)
         idx = rng.integers(0, len(self.XY_), size=n)
         base = self.XY_[idx]
-        return base + rng.normal(0, self.noise, size=base.shape).astype(np.float32) * self.sd_
+        return (
+            base
+            + rng.normal(0, self.noise, size=base.shape).astype(np.float32) * self.sd_
+        )
 
 
 class GaussianGenerator(BaseGenerator):
@@ -118,7 +134,11 @@ class GaussianGenerator(BaseGenerator):
         cov = np.cov(X, rowvar=False)
         d = cov.shape[0]
         # encogimiento automático si no se especifica: crece cuando N ~ d
-        lam = self.shrinkage if self.shrinkage is not None else min(1.0, d / max(len(X), 1))
+        lam = (
+            self.shrinkage
+            if self.shrinkage is not None
+            else min(1.0, d / max(len(X), 1))
+        )
         target = np.eye(d) * np.trace(cov) / d
         self.cov_ = (1 - lam) * cov + lam * target
         self.lam_ = lam
@@ -175,6 +195,7 @@ class BlockBootstrapGenerator(BaseGenerator):
 # 2. Redes: utilidades comunes
 # =========================================================================== #
 
+
 def _mlp(sizes: list[int], out_act: nn.Module | None = None) -> nn.Sequential:
     """MLP ReLU a partir de una lista de anchuras."""
     layers: list[nn.Module] = []
@@ -197,22 +218,28 @@ def _batches(n: int, batch_size: int, rng: np.random.Generator):
 # 3. VAE — familia latente variacional
 # =========================================================================== #
 
+
 class _VAENet(nn.Module):
     def __init__(self, d: int, latent: int, hidden: int) -> None:
         super().__init__()
-        self.enc = nn.Sequential(nn.Linear(d, hidden), nn.ReLU(),
-                                 nn.Linear(hidden, hidden), nn.ReLU())
+        self.enc = nn.Sequential(
+            nn.Linear(d, hidden), nn.ReLU(), nn.Linear(hidden, hidden), nn.ReLU()
+        )
         self.mu = nn.Linear(hidden, latent)
         self.logvar = nn.Linear(hidden, latent)
-        self.dec = nn.Sequential(nn.Linear(latent, hidden), nn.ReLU(),
-                                 nn.Linear(hidden, hidden), nn.ReLU(),
-                                 nn.Linear(hidden, d))
+        self.dec = nn.Sequential(
+            nn.Linear(latent, hidden),
+            nn.ReLU(),
+            nn.Linear(hidden, hidden),
+            nn.ReLU(),
+            nn.Linear(hidden, d),
+        )
 
     def forward(self, x):
         h = self.enc(x)
         mu, logvar = self.mu(h), self.logvar(h).clamp(-8, 8)
         std = torch.exp(0.5 * logvar)
-        z = mu + std * torch.randn_like(std)   # truco de reparametrización
+        z = mu + std * torch.randn_like(std)  # truco de reparametrización
         return self.dec(z), mu, logvar
 
 
@@ -239,15 +266,30 @@ class VAEGenerator(BaseGenerator):
 
     name = "vae"
 
-    def __init__(self, latent: int = 16, hidden: int = 256, beta: float = 1.0,
-                 epochs: int = 60, batch_size: int = 512, lr: float = 1e-3,
-                 observation_noise: bool = True) -> None:
-        self.cfg = dict(latent=latent, hidden=hidden, beta=beta, epochs=epochs,
-                        batch_size=batch_size, lr=lr,
-                        observation_noise=observation_noise)
+    def __init__(
+        self,
+        latent: int = 16,
+        hidden: int = 256,
+        beta: float = 1.0,
+        epochs: int = 60,
+        batch_size: int = 512,
+        lr: float = 1e-3,
+        observation_noise: bool = True,
+    ) -> None:
+        self.cfg = dict(
+            latent=latent,
+            hidden=hidden,
+            beta=beta,
+            epochs=epochs,
+            batch_size=batch_size,
+            lr=lr,
+            observation_noise=observation_noise,
+        )
         self.history_ = {}
 
-    def fit(self, XY: np.ndarray, seed: int = 0, verbose: bool = False) -> "VAEGenerator":
+    def fit(
+        self, XY: np.ndarray, seed: int = 0, verbose: bool = False
+    ) -> "VAEGenerator":
         c = self.cfg
         dev = get_device()
         torch.manual_seed(seed)
@@ -267,10 +309,12 @@ class VAEGenerator(BaseGenerator):
                 recon = ((xr - xb) ** 2).sum(1).mean()
                 kl = (-0.5 * (1 + logvar - mu**2 - logvar.exp()).sum(1)).mean()
                 loss = recon + c["beta"] * kl
-                opt.zero_grad(); loss.backward()
+                opt.zero_grad()
+                loss.backward()
                 nn.utils.clip_grad_norm_(self.net_.parameters(), 5.0)
                 opt.step()
-                tot["loss"] += float(loss.detach()); tot["recon"] += float(recon.detach())
+                tot["loss"] += float(loss.detach())
+                tot["recon"] += float(recon.detach())
                 tot["kl"] += float(kl.detach())
                 nb += 1
             for k in tot:
@@ -302,6 +346,7 @@ class VAEGenerator(BaseGenerator):
 # 4. WGAN-GP — familia adversarial
 # =========================================================================== #
 
+
 class WGANGPGenerator(BaseGenerator):
     """Wasserstein GAN con gradient penalty.
 
@@ -317,22 +362,39 @@ class WGANGPGenerator(BaseGenerator):
 
     name = "wgan_gp"
 
-    def __init__(self, latent: int = 32, hidden: int = 256, epochs: int = 60,
-                 batch_size: int = 512, lr: float = 1e-4, n_critic: int = 5,
-                 gp_weight: float = 10.0) -> None:
-        self.cfg = dict(latent=latent, hidden=hidden, epochs=epochs, batch_size=batch_size,
-                        lr=lr, n_critic=n_critic, gp_weight=gp_weight)
+    def __init__(
+        self,
+        latent: int = 32,
+        hidden: int = 256,
+        epochs: int = 60,
+        batch_size: int = 512,
+        lr: float = 1e-4,
+        n_critic: int = 5,
+        gp_weight: float = 10.0,
+    ) -> None:
+        self.cfg = dict(
+            latent=latent,
+            hidden=hidden,
+            epochs=epochs,
+            batch_size=batch_size,
+            lr=lr,
+            n_critic=n_critic,
+            gp_weight=gp_weight,
+        )
         self.history_ = {}
 
     def _gradient_penalty(self, critic, real, fake, dev):
         eps = torch.rand(len(real), 1, device=dev)
         mix = (eps * real + (1 - eps) * fake).requires_grad_(True)
         score = critic(mix)
-        grad = torch.autograd.grad(score, mix, torch.ones_like(score),
-                                   create_graph=True, retain_graph=True)[0]
+        grad = torch.autograd.grad(
+            score, mix, torch.ones_like(score), create_graph=True, retain_graph=True
+        )[0]
         return ((grad.norm(2, dim=1) - 1) ** 2).mean()
 
-    def fit(self, XY: np.ndarray, seed: int = 0, verbose: bool = False) -> "WGANGPGenerator":
+    def fit(
+        self, XY: np.ndarray, seed: int = 0, verbose: bool = False
+    ) -> "WGANGPGenerator":
         c = self.cfg
         dev = get_device()
         torch.manual_seed(seed)
@@ -357,14 +419,19 @@ class WGANGPGenerator(BaseGenerator):
                 gp = self._gradient_penalty(critic, real, fake, dev)
                 w_est = critic(real).mean() - critic(fake).mean()
                 loss_c = -w_est + c["gp_weight"] * gp
-                oc.zero_grad(); loss_c.backward(); oc.step()
+                oc.zero_grad()
+                loss_c.backward()
+                oc.step()
                 # --- generador (1 de cada n_critic pasos) --------------------
                 if step % c["n_critic"] == 0:
                     z = torch.randn(len(real), c["latent"], device=dev)
                     loss_g = -critic(self.gen_(z)).mean()
-                    og.zero_grad(); loss_g.backward(); og.step()
+                    og.zero_grad()
+                    loss_g.backward()
+                    og.step()
                     acc["gen"] += float(loss_g.detach())
-                acc["wasserstein"] += float(w_est.detach()); acc["critic"] += float(loss_c.detach())
+                acc["wasserstein"] += float(w_est.detach())
+                acc["critic"] += float(loss_c.detach())
                 nb += 1
             for k in acc:
                 self.history_[k].append(acc[k] / max(nb, 1))
@@ -384,6 +451,7 @@ class WGANGPGenerator(BaseGenerator):
 # =========================================================================== #
 # 5. RealNVP — familia biyectiva (verosimilitud exacta)
 # =========================================================================== #
+
 
 class _CouplingLayer(nn.Module):
     """Capa de acoplamiento afín: transforma media dimensión condicionada a la otra.
@@ -427,17 +495,28 @@ class RealNVPGenerator(BaseGenerator):
 
     name = "realnvp"
 
-    def __init__(self, n_layers: int = 8, hidden: int = 256, epochs: int = 60,
-                 batch_size: int = 512, lr: float = 1e-3) -> None:
-        self.cfg = dict(n_layers=n_layers, hidden=hidden, epochs=epochs,
-                        batch_size=batch_size, lr=lr)
+    def __init__(
+        self,
+        n_layers: int = 8,
+        hidden: int = 256,
+        epochs: int = 60,
+        batch_size: int = 512,
+        lr: float = 1e-3,
+    ) -> None:
+        self.cfg = dict(
+            n_layers=n_layers,
+            hidden=hidden,
+            epochs=epochs,
+            batch_size=batch_size,
+            lr=lr,
+        )
         self.history_ = {}
 
     def _build(self, d: int, dev):
         layers = []
         for i in range(self.cfg["n_layers"]):
             mask = torch.zeros(d, device=dev)
-            mask[i % 2 :: 2] = 1.0          # máscaras alternas: par / impar
+            mask[i % 2 :: 2] = 1.0  # máscaras alternas: par / impar
             layers.append(_CouplingLayer(d, self.cfg["hidden"], mask).to(dev))
         return nn.ModuleList(layers)
 
@@ -451,7 +530,9 @@ class RealNVPGenerator(BaseGenerator):
         base = -0.5 * (z**2 + np.log(2 * np.pi)).sum(1)
         return base + logdet
 
-    def fit(self, XY: np.ndarray, seed: int = 0, verbose: bool = False) -> "RealNVPGenerator":
+    def fit(
+        self, XY: np.ndarray, seed: int = 0, verbose: bool = False
+    ) -> "RealNVPGenerator":
         c = self.cfg
         dev = get_device()
         torch.manual_seed(seed)
@@ -468,10 +549,12 @@ class RealNVPGenerator(BaseGenerator):
             for idx in _batches(len(Xt), c["batch_size"], rng):
                 xb = Xt[torch.as_tensor(idx, device=dev)]
                 loss = -self._log_prob(xb).mean()
-                opt.zero_grad(); loss.backward()
+                opt.zero_grad()
+                loss.backward()
                 nn.utils.clip_grad_norm_(params, 5.0)
                 opt.step()
-                tot += float(loss.detach()); nb += 1
+                tot += float(loss.detach())
+                nb += 1
             self.history_["nll"].append(tot / nb)
             if verbose and ep % 10 == 0:
                 print(f"  RealNVP ep{ep:3d} NLL {self.history_['nll'][-1]:.3f}")

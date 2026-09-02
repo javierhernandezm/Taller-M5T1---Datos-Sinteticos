@@ -17,17 +17,18 @@ se CALCULAN con la aritmética real de la convolución y el pooling.
 
 El walker (`bloques_desde_modelo`) cubre `MLP`, `ConvNet1D` y todo lo que
 devuelve `generators._mlp()`, porque los tres son cadenas de `nn.Sequential`.
-Las topologías con ramas (las dos cabezas mu/logvar del VAE, el par
-generador/crítico de la WGAN, el acoplamiento de RealNVP) llevan un layout
-escrito a mano, pero sus CIFRAS siguen saliendo del módulo vivo.
+Las topologías con ramas (las dos cabezas mu/logvar del VAE, la descomposición
+de Diffusion-TS y el acoplamiento de RealNVP) llevan un layout escrito a mano,
+pero sus CIFRAS siguen saliendo del módulo vivo.
 
 Degradación sin LaTeX
 ---------------------
 El `.tex` se escribe siempre (es Python puro). La compilación solo ocurre si el
 `.tex` cambió respecto al versionado o si falta el PNG. Si no hay `pdflatex`,
-se avisa y se reutiliza el PNG cacheado en `reports/figures/`: así el repo sigue
-siendo legible para quien no tenga MiKTeX/TeX Live, y `scripts/run_all.py` no
-se rompe en headless. `render()` nunca lanza por falta de LaTeX.
+se avisa y se reutiliza el PNG cacheado en `reports/figures/`; para una figura
+nueva sin caché se dibuja una ficha 2-D equivalente con Matplotlib. Así el repo
+sigue siendo legible para quien no tenga MiKTeX/TeX Live, y `scripts/run_all.py`
+no se rompe en headless. `render()` nunca lanza por falta de LaTeX.
 
 Uso
 ---
@@ -46,9 +47,10 @@ import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass, field, replace
+from itertools import pairwise
 from pathlib import Path
 
-import torch.nn as nn
+from torch import nn
 
 from .config import Config
 from .eda import PALETTE
@@ -64,6 +66,7 @@ _LAYERS = _VENDOR / "layers"
 # 1. Representación intermedia
 # =========================================================================== #
 
+
 @dataclass(frozen=True)
 class Bloque:
     """Una caja del diagrama.
@@ -75,13 +78,13 @@ class Bloque:
     compartan la misma escala y se lean como una familia.
     """
 
-    kind: str                 # dato|conv|pool|gap|densa|salida|latente|ruido
-    name: str                 # nodo TikZ (solo [A-Za-z0-9])
-    etiqueta: str = ""        # xlabel: canales o unidades
-    largo: int = 1            # longitud de la secuencia (eje z)
-    canales: int = 1          # canales o unidades (eje x)
-    pie: tuple[str, ...] = () # rótulo bajo la caja, una entrada por línea
-    activado: bool = False    # dibuja la franja de activación (RightBandedBox)
+    kind: str  # dato|conv|pool|gap|densa|salida|latente|ruido
+    name: str  # nodo TikZ (solo [A-Za-z0-9])
+    etiqueta: str = ""  # xlabel: canales o unidades
+    largo: int = 1  # longitud de la secuencia (eje z)
+    canales: int = 1  # canales o unidades (eje x)
+    pie: tuple[str, ...] = ()  # rótulo bajo la caja, una entrada por línea
+    activado: bool = False  # dibuja la franja de activación (RightBandedBox)
     #: colocación explícita; None = encadenar tras el bloque anterior
     at: str | None = None
     offset: str | None = None
@@ -91,7 +94,7 @@ class Bloque:
 class Diagrama:
     """Un diagrama completo: bloques, flechas y títulos."""
 
-    nombre: str                                  # p.ej. "16_arq_mlp_s"
+    nombre: str  # p.ej. "16_arq_mlp_s"
     titulo: str
     subtitulo: str = ""
     bloques: list[Bloque] = field(default_factory=list)
@@ -109,19 +112,19 @@ class Diagrama:
 #: figuras de datos y resultados ya versionadas.
 _COLORES: dict[str, tuple[str, str]] = {
     #  kind      relleno                banda de activación (tono claro del mismo)
-    "dato":    (PALETTE["sky"],        "#A6DAF5"),
-    "conv":    (PALETTE["blue"],       PALETTE["sky"]),
-    "pool":    (PALETTE["grey"],       "#B0B0B0"),
-    "gap":     (PALETTE["purple"],     "#E4B4CF"),
-    "densa":   (PALETTE["green"],      "#66C7AC"),
-    "salida":  (PALETTE["vermillion"], "#F0956B"),
-    "latente": (PALETTE["orange"],     "#F3C86B"),
-    "ruido":   (PALETTE["yellow"],     "#F7F0A0"),
+    "dato": (PALETTE["sky"], "#A6DAF5"),
+    "conv": (PALETTE["blue"], PALETTE["sky"]),
+    "pool": (PALETTE["grey"], "#B0B0B0"),
+    "gap": (PALETTE["purple"], "#E4B4CF"),
+    "densa": (PALETTE["green"], "#66C7AC"),
+    "salida": (PALETTE["vermillion"], "#F0956B"),
+    "latente": (PALETTE["orange"], "#F3C86B"),
+    "ruido": (PALETTE["yellow"], "#F7F0A0"),
     # Okabe-Ito tiene 8 tonos y los 8 anteriores ya estan asignados. El bloque
     # recurrente usa un tono OSCURO del azul de "conv" en lugar de un color nuevo:
     # conv y GRU son la misma cosa en la lectura de la figura -el tronco que
     # recorre la secuencia- y el tono los separa sin salirse de la paleta.
-    "recurrente": ("#004E7C",          PALETTE["sky"]),
+    "recurrente": ("#004E7C", PALETTE["sky"]),
 }
 
 
@@ -151,10 +154,18 @@ def _geometria(b: Bloque) -> tuple[float, float, float]:
 
 def _escape(s: str) -> str:
     """Escapa lo que rompería LaTeX en un rótulo (guiones bajos, %, &, ...)."""
-    for a, b in (("\\", r"\textbackslash{}"), ("_", r"\_"), ("%", r"\%"),
-                 ("&", r"\&"), ("#", r"\#"), ("$", r"\$"), ("{", r"\{"),
-                 ("}", r"\}"), ("~", r"\textasciitilde{}"),
-                 ("^", r"\textasciicircum{}")):
+    for a, b in (
+        ("\\", r"\textbackslash{}"),
+        ("_", r"\_"),
+        ("%", r"\%"),
+        ("&", r"\&"),
+        ("#", r"\#"),
+        ("$", r"\$"),
+        ("{", r"\{"),
+        ("}", r"\}"),
+        ("~", r"\textasciitilde{}"),
+        ("^", r"\textasciicircum{}"),
+    ):
         s = s.replace(a, b)
     # Tras un `\\`, LaTeX lee un `[` inicial como el opcional de `\\[dim]` y la
     # compilación revienta ("Illegal unit of measure"). Un `{}` delante es
@@ -182,12 +193,13 @@ def _nodo(s: str) -> str:
 # `to_FullyConnected` que circula por los issues asume un Box.sty parcheado y
 # no compila contra master. Estos emisores respetan la restricción.
 
+
 def _pic_caja(b: Bloque) -> str:
     """Una caja: `RightBandedBox` si lleva activación, `Box` si no."""
     width, height, depth = _geometria(b)
     at = b.at if b.at is not None else "(0,0,0)"
     offset = b.offset if b.offset is not None else "(0,0,0)"
-    xlabel = '{{" ","dummy"}}'   # ver nota de arriba: la forma va en el pie
+    xlabel = '{{" ","dummy"}}'  # ver nota de arriba: la forma va en el pie
     comun = (
         f"        name={b.name},\n"
         f"        caption= ,\n"
@@ -262,8 +274,10 @@ def tikz_source(diag: Diagrama) -> str:
         "\\usetikzlibrary{3d}\n",
         _colores_tex(),
         "\n\\begin{document}\n\\begin{tikzpicture}\n",
-        ("\\tikzstyle{connection}=[ultra thick,every node/.style="
-         "{sloped,allow upside down},draw=\\edgecolor,opacity=0.7]\n"),
+        (
+            "\\tikzstyle{connection}=[ultra thick,every node/.style="
+            "{sloped,allow upside down},draw=\\edgecolor,opacity=0.7]\n"
+        ),
     ]
 
     # Orden de dibujo: cajas, flechas y AL FINAL los rótulos. En un diagrama con
@@ -275,8 +289,12 @@ def tikz_source(diag: Diagrama) -> str:
     for b in diag.bloques:
         colocado = replace(
             b,
-            at=b.at if b.at is not None else (f"({previo}-east)" if previo else "(0,0,0)"),
-            offset=b.offset if b.offset is not None else ("(2.15,0,0)" if previo else "(0,0,0)"),
+            at=b.at
+            if b.at is not None
+            else (f"({previo}-east)" if previo else "(0,0,0)"),
+            offset=b.offset
+            if b.offset is not None
+            else ("(2.15,0,0)" if previo else "(0,0,0)"),
         )
         partes.append(_pic_caja(colocado))
         pies.append(_pie(colocado))
@@ -312,7 +330,10 @@ def tikz_source(diag: Diagrama) -> str:
 # 4. Introspección: de nn.Module a bloques
 # =========================================================================== #
 
-def bloques_desde_modelo(model: nn.Module, in_len: int, prefijo: str = "L") -> list[Bloque]:
+
+def bloques_desde_modelo(
+    model: nn.Module, in_len: int, prefijo: str = "L"
+) -> list[Bloque]:
     """Recorre un modelo secuencial y devuelve sus bloques, con formas reales.
 
     Cubre `MLP` (un único `nn.Sequential`) y `ConvNet1D` (`conv` + `head`), y
@@ -336,37 +357,72 @@ def bloques_desde_modelo(model: nn.Module, in_len: int, prefijo: str = "L") -> l
     es_mapa = isinstance(hijos[0], (nn.Conv1d, nn.GRU, nn.LSTM, nn.RNN))
     canales, largo = (1, in_len) if es_mapa else (in_len, 1)
 
-    bloques.append(Bloque(
-        kind="dato", name=_nodo(f"{prefijo}entrada"), etiqueta=str(canales if es_mapa else ""),
-        largo=largo if es_mapa else canales, canales=canales,
-        pie=(f"({canales}, {largo})" if es_mapa else f"{canales} valores", "entrada"),
-    ))
+    bloques.append(
+        Bloque(
+            kind="dato",
+            name=_nodo(f"{prefijo}entrada"),
+            etiqueta=str(canales if es_mapa else ""),
+            largo=largo if es_mapa else canales,
+            canales=canales,
+            pie=(
+                f"({canales}, {largo})" if es_mapa else f"{canales} valores",
+                "entrada",
+            ),
+        )
+    )
 
     for i, capa in enumerate(hijos):
         nombre = _nodo(f"{prefijo}{i}")
         if isinstance(capa, nn.Conv1d):
-            largo = (largo + 2 * capa.padding[0]
-                     - capa.dilation[0] * (capa.kernel_size[0] - 1) - 1) // capa.stride[0] + 1
+            largo = (
+                largo
+                + 2 * capa.padding[0]
+                - capa.dilation[0] * (capa.kernel_size[0] - 1)
+                - 1
+            ) // capa.stride[0] + 1
             canales = capa.out_channels
-            bloques.append(Bloque(
-                kind="conv", name=nombre, etiqueta=str(canales),
-                largo=largo, canales=canales,
-                pie=(f"({canales}, {largo})", f"Conv1d k={capa.kernel_size[0]}"),
-            ))
+            bloques.append(
+                Bloque(
+                    kind="conv",
+                    name=nombre,
+                    etiqueta=str(canales),
+                    largo=largo,
+                    canales=canales,
+                    pie=(f"({canales}, {largo})", f"Conv1d k={capa.kernel_size[0]}"),
+                )
+            )
         elif isinstance(capa, (nn.MaxPool1d, nn.AvgPool1d)):
-            k = capa.kernel_size if isinstance(capa.kernel_size, int) else capa.kernel_size[0]
+            k = (
+                capa.kernel_size
+                if isinstance(capa.kernel_size, int)
+                else capa.kernel_size[0]
+            )
             s = capa.stride if isinstance(capa.stride, int) else capa.stride[0]
             largo = (largo - k) // s + 1
-            bloques.append(Bloque(
-                kind="pool", name=nombre, largo=largo, canales=canales,
-                pie=(f"({canales}, {largo})", f"MaxPool {k}"),
-            ))
+            bloques.append(
+                Bloque(
+                    kind="pool",
+                    name=nombre,
+                    largo=largo,
+                    canales=canales,
+                    pie=(f"({canales}, {largo})", f"MaxPool {k}"),
+                )
+            )
         elif isinstance(capa, nn.AdaptiveAvgPool1d):
-            largo = capa.output_size if isinstance(capa.output_size, int) else capa.output_size[0]
-            bloques.append(Bloque(
-                kind="gap", name=nombre, largo=largo, canales=canales,
-                pie=(f"({canales}, {largo})", "GlobalAvgPool"),
-            ))
+            largo = (
+                capa.output_size
+                if isinstance(capa.output_size, int)
+                else capa.output_size[0]
+            )
+            bloques.append(
+                Bloque(
+                    kind="gap",
+                    name=nombre,
+                    largo=largo,
+                    canales=canales,
+                    pie=(f"({canales}, {largo})", "GlobalAvgPool"),
+                )
+            )
         elif isinstance(capa, (nn.GRU, nn.LSTM, nn.RNN)):
             # Una caja POR CAPA recurrente, no una sola por el modulo: apilar dos
             # GRU es una decision de arquitectura y tiene que verse, igual que se
@@ -377,50 +433,74 @@ def bloques_desde_modelo(model: nn.Module, in_len: int, prefijo: str = "L") -> l
             tipo = type(capa).__name__
             canales = capa.hidden_size
             for j in range(capa.num_layers):
-                pie = [f"({canales}, {largo})", f"{tipo} capa {j + 1}/{capa.num_layers}"]
+                pie = [
+                    f"({canales}, {largo})",
+                    f"{tipo} capa {j + 1}/{capa.num_layers}",
+                ]
                 # nn.GRU aplica su dropout ENTRE capas, no tras la ultima.
                 if capa.dropout and j < capa.num_layers - 1:
                     pie.append(f"Dropout p={capa.dropout:g}")
-                bloques.append(Bloque(
-                    kind="recurrente", name=_nodo(f"{prefijo}{i}r{j}"),
-                    etiqueta=str(canales), largo=largo, canales=canales,
-                    pie=tuple(pie),
-                ))
+                bloques.append(
+                    Bloque(
+                        kind="recurrente",
+                        name=_nodo(f"{prefijo}{i}r{j}"),
+                        etiqueta=str(canales),
+                        largo=largo,
+                        canales=canales,
+                        pie=tuple(pie),
+                    )
+                )
             # El modelo se queda con el ultimo paso: (H, L) -> (H, 1). Merece caja
             # propia porque es donde la secuencia deja de serlo, y es el analogo
             # exacto del GlobalAvgPool de la CNN: mismo papel, distinto criterio
             # (el ultimo estado en vez de la media sobre el tiempo).
             largo = 1
-            bloques.append(Bloque(
-                kind="gap", name=_nodo(f"{prefijo}{i}ult"), largo=largo, canales=canales,
-                pie=(f"({canales}, 1)", "último estado", "h[:, -1]"),
-            ))
+            bloques.append(
+                Bloque(
+                    kind="gap",
+                    name=_nodo(f"{prefijo}{i}ult"),
+                    largo=largo,
+                    canales=canales,
+                    pie=(f"({canales}, 1)", "último estado", "h[:, -1]"),
+                )
+            )
         elif isinstance(capa, nn.Flatten):
-            canales, largo = canales * largo, 1   # sin caja: solo contabilidad
+            canales, largo = canales * largo, 1  # sin caja: solo contabilidad
         elif isinstance(capa, nn.Linear):
             canales, largo = capa.out_features, 1
-            bloques.append(Bloque(
-                kind="densa", name=nombre, etiqueta=str(canales), canales=canales,
-                pie=(f"{canales} unidad" + ("es" if canales != 1 else ""),
-                     f"Linear {capa.in_features}->{canales}"),
-            ))
+            bloques.append(
+                Bloque(
+                    kind="densa",
+                    name=nombre,
+                    etiqueta=str(canales),
+                    canales=canales,
+                    pie=(
+                        f"{canales} unidad" + ("es" if canales != 1 else ""),
+                        f"Linear {capa.in_features}->{canales}",
+                    ),
+                )
+            )
         elif isinstance(capa, (nn.ReLU, nn.LeakyReLU, nn.Tanh, nn.GELU, nn.SiLU)):
             if bloques:
                 acto = type(capa).__name__
                 bloques[-1] = replace(
-                    bloques[-1], activado=True, pie=bloques[-1].pie + (acto,))
+                    bloques[-1], activado=True, pie=bloques[-1].pie + (acto,)
+                )
         elif isinstance(capa, nn.Dropout):
             if bloques:
                 bloques[-1] = replace(
-                    bloques[-1], pie=bloques[-1].pie + (f"Dropout p={capa.p:g}",))
+                    bloques[-1], pie=bloques[-1].pie + (f"Dropout p={capa.p:g}",)
+                )
         else:
             raise TypeError(f"Capa no contemplada por el walker: {type(capa).__name__}")
 
     # La última caja es la salida de la red: color y rótulo propios.
     ultimo = bloques[-1]
-    bloques[-1] = replace(ultimo, kind="salida",
-                          pie=(ultimo.pie[0], "salida")
-                          + tuple(l for l in ultimo.pie if "Linear" in l))
+    bloques[-1] = replace(
+        ultimo,
+        kind="salida",
+        pie=(ultimo.pie[0], "salida") + tuple(l for l in ultimo.pie if "Linear" in l),
+    )
     return bloques
 
 
@@ -461,16 +541,22 @@ def _misma_arquitectura(a: tuple[str, dict], b: tuple[str, dict] | None) -> bool
     """Compara (arch, kwargs) tolerando listas frente a tuplas del JSON."""
     if b is None:
         return False
-    norm = lambda kw: {k: tuple(v) if isinstance(v, (list, tuple)) else v
-                       for k, v in kw.items()}
+    norm = lambda kw: {
+        k: tuple(v) if isinstance(v, (list, tuple)) else v for k, v in kw.items()
+    }
     return a[0] == b[0] and norm(a[1]) == norm(b[1])
 
 
-def diagrama_candidata(nombre_fig: str, clave: str, cfg: Config, in_len: int) -> Diagrama:
+def diagrama_candidata(
+    nombre_fig: str, clave: str, cfg: Config, in_len: int
+) -> Diagrama:
     """Ficha de una de las seis candidatas del notebook 02."""
     arch, kwargs = CANDIDATAS[clave]
-    model = build_model(arch, in_len=in_len, **kwargs) if arch == "mlp" \
+    model = (
+        build_model(arch, in_len=in_len, **kwargs)
+        if arch == "mlp"
         else build_model(arch, **kwargs)
+    )
     congelada = _misma_arquitectura((arch, kwargs), _campeona(cfg))
     sub = f"{count_params(model):,} parámetros · entrada (B, {in_len}) · salida (B,)"
     if congelada:
@@ -491,60 +577,128 @@ def diagrama_vae(gen, d: int) -> Diagrama:
     h, lat = gen.cfg["hidden"], gen.cfg["latent"]
     # el walker marca su última caja como "salida"; aquí es una capa oculta más
     enc = bloques_desde_modelo(nn.Sequential(net.enc), d, prefijo="ve")
-    enc[-1] = replace(enc[-1], kind="densa", activado=True,
-                      pie=(f"{h} unidades", f"Linear {h}->{h}", "ReLU"))
+    enc[-1] = replace(
+        enc[-1],
+        kind="densa",
+        activado=True,
+        pie=(f"{h} unidades", f"Linear {h}->{h}", "ReLU"),
+    )
     dec = bloques_desde_modelo(nn.Sequential(net.dec), lat, prefijo="vd")[1:]
 
-    mu = Bloque(kind="latente", name="vmu", etiqueta=str(lat), canales=lat,
-                pie=(f"{lat} unidades", "mu", f"Linear {h}->{lat}"),
-                at=f"({enc[-1].name}-east)", offset="(2.6,2.9,0)")
-    lv = Bloque(kind="latente", name="vlogvar", etiqueta=str(lat), canales=lat,
-                pie=(f"{lat} unidades", "log var", f"Linear {h}->{lat}"),
-                at=f"({enc[-1].name}-east)", offset="(2.6,-2.9,0)")
-    z = Bloque(kind="ruido", name="vz", etiqueta=str(lat), canales=lat,
-               pie=(f"{lat} unidades", "muestreo de z", "reparametrización"),
-               at="(vmu-east)", offset="(2.6,-2.9,0)")
+    mu = Bloque(
+        kind="latente",
+        name="vmu",
+        etiqueta=str(lat),
+        canales=lat,
+        pie=(f"{lat} unidades", "mu", f"Linear {h}->{lat}"),
+        at=f"({enc[-1].name}-east)",
+        offset="(2.6,2.9,0)",
+    )
+    lv = Bloque(
+        kind="latente",
+        name="vlogvar",
+        etiqueta=str(lat),
+        canales=lat,
+        pie=(f"{lat} unidades", "log var", f"Linear {h}->{lat}"),
+        at=f"({enc[-1].name}-east)",
+        offset="(2.6,-2.9,0)",
+    )
+    z = Bloque(
+        kind="ruido",
+        name="vz",
+        etiqueta=str(lat),
+        canales=lat,
+        pie=(f"{lat} unidades", "muestreo de z", "reparametrización"),
+        at="(vmu-east)",
+        offset="(2.6,-2.9,0)",
+    )
     dec = [replace(dec[0], at="(vz-east)", offset="(2.7,0,0)")] + dec[1:]
     dec[-1] = replace(dec[-1], kind="salida", pie=("reconstrucción", f"{d} valores"))
 
     bloques = enc + [mu, lv, z] + dec
-    conexiones = [(a.name, b.name) for a, b in zip(enc, enc[1:])]
-    conexiones += [(enc[-1].name, "vmu"), (enc[-1].name, "vlogvar"),
-                   ("vmu", "vz"), ("vlogvar", "vz"), ("vz", dec[0].name)]
-    conexiones += [(a.name, b.name) for a, b in zip(dec, dec[1:])]
+    conexiones = [(a.name, b.name) for a, b in pairwise(enc)]
+    conexiones += [
+        (enc[-1].name, "vmu"),
+        (enc[-1].name, "vlogvar"),
+        ("vmu", "vz"),
+        ("vlogvar", "vz"),
+        ("vz", dec[0].name),
+    ]
+    conexiones += [(a.name, b.name) for a, b in pairwise(dec)]
     return Diagrama(
-        nombre="20_arq_vae", titulo="VAE — familia latente variacional",
-        subtitulo=(f"entrada [X | y] de {d} dims · latente {lat} · "
-                   "z = mu + sigma·eps · loss = MSE + beta·KL(q(z|x) || N(0,I))"),
-        bloques=bloques, conexiones=conexiones,
+        nombre="20_arq_vae",
+        titulo="VAE — familia latente variacional",
+        subtitulo=(
+            f"entrada [X | y] de {d} dims · latente {lat} · "
+            "z = mu + sigma·eps · loss = MSE + beta·KL(q(z|x) || N(0,I))"
+        ),
+        bloques=bloques,
+        conexiones=conexiones,
     )
 
 
-def diagrama_wgan(gen, d: int) -> Diagrama:
-    """WGAN-GP: generador arriba, crítico abajo, ventana real entrando de lado."""
-    from .generators import _mlp
-
-    lat, h = gen.cfg["latent"], gen.cfg["hidden"]
-    g = bloques_desde_modelo(nn.Sequential(_mlp([lat, h, h, d])), lat, prefijo="wg")
-    g[0] = replace(g[0], kind="ruido", pie=("z ~ N(0, I)", f"{lat} dims"))
-    g[-1] = replace(g[-1], kind="salida", pie=("ventana falsa", f"{d} valores"))
-
-    c = bloques_desde_modelo(nn.Sequential(_mlp([d, h, h, 1])), d, prefijo="wc")
-    c[-1] = replace(c[-1], kind="salida", pie=("score", "Wasserstein"))
-    # el crítico cuelga por debajo del generador, desplazado en z
-    c[0] = replace(c[0], kind="dato", pie=("ventana real", f"{d} valores"),
-                   at=f"({g[-1].name}-east)", offset="(-2.4,-3.4,0)")
-    c[1] = replace(c[1], at=f"({g[-1].name}-east)", offset="(2.6,-1.7,0)")
-
-    conexiones = [(a.name, b.name) for a, b in zip(g, g[1:])]
-    conexiones += [(a.name, b.name) for a, b in zip(c[1:], c[2:])]
-    conexiones += [(c[0].name, c[1].name), (g[-1].name, c[1].name)]
+def diagrama_diffusion_ts(gen, d: int) -> Diagrama:
+    """Diffusion-TS R61: tokens, Transformer y cabezas de reconstrucción."""
+    c = gen.cfg
+    window_len = c["window_len"]
+    d_model = c["d_model"]
+    blocks = [
+        Bloque(
+            kind="ruido",
+            name="dnoise",
+            etiqueta=str(d),
+            canales=d,
+            pie=("R61 con ruido", "paso t", "[X60 | y]"),
+        ),
+        Bloque(
+            kind="densa",
+            name="dtokens",
+            etiqueta=str(d_model),
+            canales=d_model,
+            activado=True,
+            pie=(f"{window_len} retornos", "1 token target", f"d_model {d_model}"),
+        ),
+        Bloque(
+            kind="conv",
+            name="dtransformer",
+            etiqueta=str(c["n_layers"]),
+            canales=d_model,
+            largo=window_len + 1,
+            pie=(
+                "Transformer bidireccional",
+                f"{c['n_layers']} capas · {c['n_heads']} heads",
+                "atención conjunta X-y",
+            ),
+        ),
+        Bloque(
+            kind="densa",
+            name="ddecomp",
+            etiqueta=str(window_len),
+            canales=window_len,
+            activado=True,
+            pie=(
+                "tendencia + Fourier",
+                f"grado {c['trend_degree']} · top-{c['seasonal_k']}",
+                "residuo temporal",
+            ),
+        ),
+        Bloque(
+            kind="salida",
+            name="dout",
+            etiqueta=str(d),
+            canales=d,
+            pie=("x0 reconstruido", f"{window_len} retornos + y", "DDIM"),
+        ),
+    ]
     return Diagrama(
-        nombre="21_arq_wgan_gp", titulo="WGAN-GP — familia adversarial",
-        subtitulo=(f"latente {lat} · n_critic={gen.cfg['n_critic']} · "
-                   f"gradient penalty lambda={gen.cfg['gp_weight']:g} · "
-                   "la loss del crítico aproxima la distancia de Wasserstein"),
-        bloques=g + c, conexiones=conexiones,
+        nombre="21_arq_diffusion_ts",
+        titulo="Diffusion-TS R61 — familia de difusión",
+        subtitulo=(
+            f"{c['diffusion_steps']} pasos de difusión · {c['sample_steps']} pasos DDIM · "
+            "loss L1 temporal + Fourier solo sobre X · y es un token especial"
+        ),
+        bloques=blocks,
+        conexiones=[(a.name, b.name) for a, b in pairwise(blocks)],
     )
 
 
@@ -552,24 +706,56 @@ def diagrama_realnvp(gen, d: int) -> Diagrama:
     """RealNVP: la cadena de acoplamientos, más el zoom de uno solo."""
     n, h = gen.cfg["n_layers"], gen.cfg["hidden"]
 
-    cadena = [Bloque(kind="dato", name="rx", etiqueta=str(d), canales=d,
-                     pie=("x = [X | y]", f"{d} valores"))]
+    cadena = [
+        Bloque(
+            kind="dato",
+            name="rx",
+            etiqueta=str(d),
+            canales=d,
+            pie=("x = [X | y]", f"{d} valores"),
+        )
+    ]
     for i in range(n):
-        cadena.append(Bloque(
-            kind="densa", name=f"rc{i}", etiqueta=str(d), canales=d, activado=True,
-            pie=(f"acoplamiento {i + 1}", f"máscara {'par' if i % 2 == 0 else 'impar'}"),
-        ))
-    cadena.append(Bloque(kind="salida", name="rz", etiqueta=str(d), canales=d,
-                         pie=("z ~ N(0, I)", "verosimilitud exacta")))
+        cadena.append(
+            Bloque(
+                kind="densa",
+                name=f"rc{i}",
+                etiqueta=str(d),
+                canales=d,
+                activado=True,
+                pie=(
+                    f"acoplamiento {i + 1}",
+                    f"máscara {'par' if i % 2 == 0 else 'impar'}",
+                ),
+            )
+        )
+    cadena.append(
+        Bloque(
+            kind="salida",
+            name="rz",
+            etiqueta=str(d),
+            canales=d,
+            pie=("z ~ N(0, I)", "verosimilitud exacta"),
+        )
+    )
 
     # Zoom: qué hay dentro de una capa de acoplamiento. Se ancla muy por debajo.
     interior = nn.Sequential(
-        nn.Linear(d, h), nn.ReLU(), nn.Linear(h, h), nn.ReLU(),
-        nn.Linear(h, d), nn.Tanh(),
+        nn.Linear(d, h),
+        nn.ReLU(),
+        nn.Linear(h, h),
+        nn.ReLU(),
+        nn.Linear(h, d),
+        nn.Tanh(),
     )
     s = bloques_desde_modelo(nn.Sequential(interior), d, prefijo="rs")
-    s[0] = replace(s[0], kind="dato", pie=("x parte a", "mitad congelada"),
-                   at="(rx-east)", offset="(-1.6,-4.2,0)")
+    s[0] = replace(
+        s[0],
+        kind="dato",
+        pie=("x parte a", "mitad congelada"),
+        at="(rx-east)",
+        offset="(-1.6,-4.2,0)",
+    )
     s[-1] = replace(s[-1], kind="salida", pie=("s y t", "escala y traslación"))
 
     extra = (
@@ -578,54 +764,103 @@ def diagrama_realnvp(gen, d: int) -> Diagrama:
         "{$y_a = x_a$ \\\\ $y_b = x_b \\cdot e^{s(x_a)} + t(x_a)$ \\\\[2pt] "
         "$\\log|\\det J| = \\sum s(x_a)$};\n"
     )
-    conexiones = [(a.name, b.name) for a, b in zip(cadena, cadena[1:])]
-    conexiones += [(a.name, b.name) for a, b in zip(s, s[1:])]
+    conexiones = [(a.name, b.name) for a, b in pairwise(cadena)]
+    conexiones += [(a.name, b.name) for a, b in pairwise(s)]
     return Diagrama(
-        nombre="22_arq_realnvp", titulo="RealNVP — familia biyectiva",
-        subtitulo=(f"{n} capas de acoplamiento afín · MLP interno {d}->{h}->{h}->{d} · "
-                   "entrenado por NLL exacta (abajo, el interior de una capa)"),
-        bloques=cadena + s, conexiones=conexiones, extra=extra,
+        nombre="22_arq_realnvp",
+        titulo="RealNVP — familia biyectiva",
+        subtitulo=(
+            f"{n} capas de acoplamiento afín · MLP interno {d}->{h}->{h}->{d} · "
+            "entrenado por NLL exacta (abajo, el interior de una capa)"
+        ),
+        bloques=cadena + s,
+        conexiones=conexiones,
+        extra=extra,
     )
 
 
 def diagrama_pipeline(cfg: Config) -> Diagrama:
     """El recorrido del dato: de los precios PIT al target, con la rama sintética."""
     camino = [
-        Bloque(kind="dato", name="pprecios", canales=256,
-               pie=("precios PIT", "S&P 1500", "2012–2026")),
-        Bloque(kind="dato", name="pret", canales=180,
-               pie=("log-retornos", "diarios", "huecos > 5d fuera")),
-        Bloque(kind="conv", name="pvent", canales=64, largo=cfg.window_len,
-               etiqueta=str(cfg.window_len),
-               pie=(f"ventanas {cfg.window_len}d", f"stride {cfg.stride}",
-                    "split temporal")),
-        Bloque(kind="densa", name="pstd", canales=cfg.window_len, activado=False,
-               etiqueta=str(cfg.window_len),
-               pie=("estandarizar", "mu, sd de train", "(congelados)")),
-        Bloque(kind="gap", name="pred", canales=96, offset="(5.4,0,0)",
-               pie=("red congelada", "downstream", "reference.json")),
-        Bloque(kind="salida", name="py", canales=2, etiqueta="1",
-               pie=("y = ln sigma", f"{cfg.horizon}d adelante", "anualizada")),
+        Bloque(
+            kind="dato",
+            name="pprecios",
+            canales=256,
+            pie=("precios PIT", "S&P 1500", "2012–2026"),
+        ),
+        Bloque(
+            kind="dato",
+            name="pret",
+            canales=180,
+            pie=("log-retornos", "diarios", "huecos > 5d fuera"),
+        ),
+        Bloque(
+            kind="conv",
+            name="pvent",
+            canales=64,
+            largo=cfg.window_len,
+            etiqueta=str(cfg.window_len),
+            pie=(
+                f"ventanas {cfg.window_len}d",
+                f"stride {cfg.stride}",
+                "split temporal",
+            ),
+        ),
+        Bloque(
+            kind="densa",
+            name="pstd",
+            canales=cfg.window_len,
+            activado=False,
+            etiqueta=str(cfg.window_len),
+            pie=("estandarizar", "mu, sd de train", "(congelados)"),
+        ),
+        Bloque(
+            kind="gap",
+            name="pred",
+            canales=96,
+            offset="(5.4,0,0)",
+            pie=("red congelada", "downstream", "reference.json"),
+        ),
+        Bloque(
+            kind="salida",
+            name="py",
+            canales=2,
+            etiqueta="1",
+            pie=("y = ln sigma", f"{cfg.horizon}d adelante", "anualizada"),
+        ),
     ]
     # Rama sintética: los generadores se entrenan con las ventanas reales de
     # train y devuelven ventanas nuevas a la mezcla. Es la tesis del taller.
     rama = [
-        Bloque(kind="latente", name="pgen", canales=110,
-               pie=("generador", "VAE / WGAN-GP", "RealNVP"),
-               at="(pstd-east)", offset="(1.2,-3.6,0)"),
-        Bloque(kind="ruido", name="psint", canales=110,
-               pie=("ventanas", "sintéticas", "[X | y]"),
-               at="(pgen-east)", offset="(2.2,0,0)"),
+        Bloque(
+            kind="latente",
+            name="pgen",
+            canales=110,
+            pie=("generador", "VAE / Diffusion-TS", "RealNVP"),
+            at="(pstd-east)",
+            offset="(1.2,-3.6,0)",
+        ),
+        Bloque(
+            kind="ruido",
+            name="psint",
+            canales=110,
+            pie=("ventanas", "sintéticas", "[X | y]"),
+            at="(pgen-east)",
+            offset="(2.2,0,0)",
+        ),
     ]
-    conexiones = [(a.name, b.name) for a, b in zip(camino, camino[1:])]
+    conexiones = [(a.name, b.name) for a, b in pairwise(camino)]
     conexiones += [("pstd", "pgen"), ("pgen", "psint"), ("psint", "pred")]
     return Diagrama(
         nombre="23_pipeline_datos",
         titulo="Pipeline del taller — del precio al target, con la rama sintética",
-        subtitulo=(f"ventana {cfg.window_len}d -> horizonte {cfg.horizon}d · "
-                   f"anualización {cfg.ann_factor} · embargo {cfg.embargo_days}d · "
-                   "la red del centro es la MISMA en las 117 celdas de la malla"),
-        bloques=camino + rama, conexiones=conexiones,
+        subtitulo=(
+            f"ventana {cfg.window_len}d -> horizonte {cfg.horizon}d · "
+            f"anualización {cfg.ann_factor} · embargo {cfg.embargo_days}d · "
+            "la red del centro es la MISMA en las 798 celdas de las dos mallas"
+        ),
+        bloques=camino + rama,
+        conexiones=conexiones,
     )
 
 
@@ -637,14 +872,15 @@ def diagrama_pipeline(cfg: Config) -> Diagrama:
 #: este diccionario con el literal del propio notebook, así que si allí cambia
 #: un hiperparámetro y aquí no, el test falla.
 GENERADORES_03: dict[str, dict] = {
-    "vae":     {"latent": 16, "hidden": 256, "beta": 1.0, "epochs": 40},
-    "wgan_gp": {"latent": 32, "hidden": 256, "epochs": 150, "lr": 2e-4, "n_critic": 5},
+    "vae": {"latent": 16, "hidden": 256, "beta": 1.0, "epochs": 40},
+    "diffusion_ts": {"train_steps": 3_000, "sample_steps": 50},
     "realnvp": {"n_layers": 6, "hidden": 128, "epochs": 30},
 }
 
 
-def diagramas_taller(cfg: Config | None = None,
-                     generadores: dict | None = None) -> list[Diagrama]:
+def diagramas_taller(
+    cfg: Config | None = None, generadores: dict | None = None
+) -> list[Diagrama]:
     """Los diez diagramas del taller, en el orden de numeración de figuras.
 
     `generadores` acepta el diccionario de instancias YA construidas del
@@ -652,29 +888,37 @@ def diagramas_taller(cfg: Config | None = None,
     garantizar que la figura describe exactamente lo que se entrenó. Si no se
     pasa, se reconstruyen desde `GENERADORES_03`.
     """
-    from .generators import RealNVPGenerator, VAEGenerator, WGANGPGenerator
+    from .diffusion_ts import DiffusionTSR61Generator
+    from .generators import RealNVPGenerator, VAEGenerator
 
     cfg = cfg or Config()
     in_len = cfg.window_len
-    d = in_len + 1                      # el par conjunto [X | y] que ven los generadores
+    d = in_len + 1  # el par conjunto [X | y] que ven los generadores
     # Las dos GRU van al final de la numeracion (29, 30) y no a continuacion de
     # las otras candidatas: 20-28 ya estan ocupados por los generadores, el
     # pipeline y las figuras de auditoria de los notebooks 03 y 04. Meterlas en
     # bloque con 16-19 obligaria a renumerar media carpeta -y a tocar los cuatro
     # notebooks-, que es un cambio propio y no de esta rama. Queda como deuda.
-    nombres = ["16_arq_mlp_s", "17_arq_mlp_l", "18_arq_cnn_s", "19_arq_cnn_l",
-               "29_arq_gru_s", "30_arq_gru_l"]
+    nombres = [
+        "16_arq_mlp_s",
+        "17_arq_mlp_l",
+        "18_arq_cnn_s",
+        "19_arq_cnn_l",
+        "29_arq_gru_s",
+        "30_arq_gru_l",
+    ]
     assert len(nombres) == len(CANDIDATAS), "un nombre de figura por candidata"
-    diags = [diagrama_candidata(n, k, cfg, in_len)
-             for n, k in zip(nombres, CANDIDATAS)]
+    diags = [diagrama_candidata(n, k, cfg, in_len) for n, k in zip(nombres, CANDIDATAS)]
 
     gens = generadores or {}
     vae = gens.get("vae") or VAEGenerator(**GENERADORES_03["vae"])
-    wgan = gens.get("wgan_gp") or WGANGPGenerator(**GENERADORES_03["wgan_gp"])
+    diffusion = gens.get("diffusion_ts") or DiffusionTSR61Generator(
+        **GENERADORES_03["diffusion_ts"]
+    )
     flow = gens.get("realnvp") or RealNVPGenerator(**GENERADORES_03["realnvp"])
 
     diags.append(diagrama_vae(vae, d))
-    diags.append(diagrama_wgan(wgan, d))
+    diags.append(diagrama_diffusion_ts(diffusion, d))
     diags.append(diagrama_realnvp(flow, d))
     diags.append(diagrama_pipeline(cfg))
     return diags
@@ -684,8 +928,88 @@ def diagramas_taller(cfg: Config | None = None,
 # 6. Compilación con caché y degradación
 # =========================================================================== #
 
+
 class LatexNoDisponible(RuntimeError):
     """No hay `pdflatex` en el PATH."""
+
+
+def _render_fallback_matplotlib(diag: Diagrama, png_path: Path, dpi: int) -> None:
+    """Dibuja una versión 2-D informativa cuando LaTeX no está disponible.
+
+    No pretende imitar la perspectiva de PlotNeuralNet. Su función es que una
+    arquitectura nueva nunca desaparezca del pipeline documental por depender
+    de una instalación externa de TeX. Los textos y conexiones proceden de la
+    misma representación :class:`Diagrama` que alimenta el TikZ.
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import FancyBboxPatch
+
+    n = len(diag.bloques)
+    fig, ax = plt.subplots(figsize=(max(10.0, 2.25 * n), 4.8))
+    posiciones = {b.name: i for i, b in enumerate(diag.bloques)}
+
+    for i, bloque in enumerate(diag.bloques):
+        color, _ = _COLORES[bloque.kind]
+        caja = FancyBboxPatch(
+            (i - 0.42, -0.42),
+            0.84,
+            0.84,
+            boxstyle="round,pad=0.04,rounding_size=0.06",
+            facecolor=color,
+            edgecolor="#333333",
+            linewidth=1.1,
+        )
+        ax.add_patch(caja)
+        ax.text(
+            i,
+            0.04,
+            bloque.etiqueta or bloque.kind,
+            ha="center",
+            va="center",
+            color="white" if bloque.kind not in {"ruido"} else "#222222",
+            fontsize=11,
+            fontweight="bold",
+        )
+        if bloque.pie:
+            ax.text(
+                i,
+                -0.58,
+                "\n".join(bloque.pie),
+                ha="center",
+                va="top",
+                fontsize=8,
+                linespacing=1.3,
+            )
+
+    conexiones = diag.conexiones or [
+        (a.name, b.name) for a, b in pairwise(diag.bloques)
+    ]
+    for origen, destino in conexiones:
+        x0, x1 = posiciones[origen], posiciones[destino]
+        ax.annotate(
+            "",
+            xy=(x1 - 0.46, 0),
+            xytext=(x0 + 0.46, 0),
+            arrowprops={"arrowstyle": "->", "color": "#444444", "lw": 1.4},
+        )
+
+    ax.set_title(diag.titulo, fontsize=14, fontweight="bold", pad=18)
+    ax.text(
+        0.5,
+        1.01,
+        diag.subtitulo,
+        transform=ax.transAxes,
+        ha="center",
+        va="bottom",
+        fontsize=9,
+        color="#555555",
+    )
+    ax.set_xlim(-0.65, max(n - 0.35, 0.65))
+    ax.set_ylim(-1.45, 0.65)
+    ax.axis("off")
+    fig.tight_layout()
+    fig.savefig(png_path, dpi=dpi, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
 
 
 def _compilar(tex: str, nombre: str, dpi: int) -> tuple[bytes, bytes]:
@@ -703,8 +1027,12 @@ def _compilar(tex: str, nombre: str, dpi: int) -> tuple[bytes, bytes]:
         (td / f"{nombre}.tex").write_text(tex, encoding="utf-8", newline="\n")
         r = subprocess.run(
             ["pdflatex", "-interaction=nonstopmode", "-halt-on-error", f"{nombre}.tex"],
-            cwd=td, capture_output=True, text=True, errors="replace", timeout=300,
-            check=False,   # el returncode se inspecciona abajo para dar un log útil
+            cwd=td,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=300,
+            check=False,  # el returncode se inspecciona abajo para dar un log útil
         )
         pdf = td / f"{nombre}.pdf"
         if r.returncode != 0 or not pdf.exists():
@@ -714,23 +1042,44 @@ def _compilar(tex: str, nombre: str, dpi: int) -> tuple[bytes, bytes]:
             log = td / f"{nombre}.log"
             texto = log.read_text(errors="replace") if log.exists() else r.stdout
             lineas = texto.splitlines()
-            fallos = ["\n".join(lineas[i:i + 6])
-                      for i, l in enumerate(lineas) if l.startswith("!")]
+            fallos = [
+                "\n".join(lineas[i : i + 6])
+                for i, l in enumerate(lineas)
+                if l.startswith("!")
+            ]
             detalle = "\n\n".join(fallos[:3]) if fallos else texto[-2000:]
             raise RuntimeError(f"pdflatex falló en {nombre}:\n{detalle}")
         png_b = b""
         if shutil.which("pdftoppm") is not None:
-            subprocess.run(["pdftoppm", "-png", "-r", str(dpi), "-singlefile",
-                            f"{nombre}.pdf", nombre],
-                           cwd=td, capture_output=True, timeout=300, check=True)
+            subprocess.run(
+                [
+                    "pdftoppm",
+                    "-png",
+                    "-r",
+                    str(dpi),
+                    "-singlefile",
+                    f"{nombre}.pdf",
+                    nombre,
+                ],
+                cwd=td,
+                capture_output=True,
+                timeout=300,
+                check=True,
+            )
             salida = td / f"{nombre}.png"
             if salida.exists():
                 png_b = salida.read_bytes()
         return pdf.read_bytes(), png_b
 
 
-def render(diag: Diagrama, *, fig_dir: Path | None = None, force: bool = False,
-           dpi: int = 300, verbose: bool = True) -> Path | None:
+def render(
+    diag: Diagrama,
+    *,
+    fig_dir: Path | None = None,
+    force: bool = False,
+    dpi: int = 300,
+    verbose: bool = True,
+) -> Path | None:
     """Genera (o reutiliza) el PNG del diagrama. Devuelve su ruta, o None.
 
     El `.tex` es la clave de caché: si el que se acaba de generar es idéntico al
@@ -750,19 +1099,23 @@ def render(diag: Diagrama, *, fig_dir: Path | None = None, force: bool = False,
             print(f"  = {diag.nombre}: sin cambios, se reutiliza el PNG cacheado")
         return png_path
 
-    # El `.tex` solo se escribe si la compilación sale bien. Si se escribiera
-    # antes, en una máquina sin LaTeX un cambio de arquitectura actualizaría la
-    # clave de caché dejando el PNG viejo: la siguiente ejecución en una máquina
-    # CON LaTeX vería tex == nuevo y se saltaría la regeneración para siempre.
+    # Con un PNG viejo, el `.tex` solo se actualiza si LaTeX compila: evita que
+    # la clave de caché describa una arquitectura distinta a la imagen. Si no
+    # existe PNG, el fallback Matplotlib sí puede escribir ambos artefactos de
+    # forma atómica desde la misma representación intermedia.
     try:
         pdf_b, png_b = _compilar(nuevo, diag.nombre, dpi)
     except LatexNoDisponible:
         if png_path.exists():
-            print(f"  ! {diag.nombre}: sin pdflatex; se usa el PNG cacheado "
-                  "(instala MiKTeX/TeX Live para regenerarlo)")
+            print(
+                f"  ! {diag.nombre}: sin pdflatex; se usa el PNG cacheado "
+                "(instala MiKTeX/TeX Live para regenerarlo)"
+            )
             return png_path
-        print(f"  ! {diag.nombre}: sin pdflatex y sin PNG cacheado; figura omitida")
-        return None
+        _render_fallback_matplotlib(diag, png_path, dpi)
+        tex_path.write_text(nuevo, encoding="utf-8", newline="\n")
+        print(f"  + {diag.nombre}: sin pdflatex; PNG 2-D generado con Matplotlib")
+        return png_path
     tex_path.write_text(nuevo, encoding="utf-8", newline="\n")
     pdf_path.write_bytes(pdf_b)
     if png_b:
@@ -770,5 +1123,8 @@ def render(diag: Diagrama, *, fig_dir: Path | None = None, force: bool = False,
         if verbose:
             print(f"  + {diag.nombre}: {len(png_b) // 1024} KB")
         return png_path
-    print(f"  ! {diag.nombre}: PDF generado, pero falta pdftoppm para el PNG")
-    return None
+    _render_fallback_matplotlib(diag, png_path, dpi)
+    print(
+        f"  + {diag.nombre}: PDF generado sin pdftoppm; PNG 2-D generado con Matplotlib"
+    )
+    return png_path
