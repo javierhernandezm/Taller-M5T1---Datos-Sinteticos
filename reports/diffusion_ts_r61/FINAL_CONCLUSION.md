@@ -38,8 +38,9 @@ La implementación definitiva elimina esa ventaja:
 - la pérdida espectral se aplica solo a X, porque `y` no es un retorno temporal;
 - la entrada y salida siguen siendo exactamente `(n, 61)`.
 
-R81 queda versionado y etiquetado como **exploratorio**. Ninguna cifra canónica de los
-notebooks 03/04 procede de él.
+R81 fue una exploración previa y **no se versiona**: ni su informe ni sus runners entran
+en `main`, porque ninguna cifra canónica de los notebooks 03/04 procede de ellos. Queda
+recuperable desde el historial de la rama `codex/research-diffusion-ts`.
 
 ## Procedencia y adaptación
 

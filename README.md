@@ -29,7 +29,7 @@ taller_b5t1/
 │   ├── models.py              #   arquitecturas candidatas del modelo downstream
 │   ├── training.py            #   harness único de entrenamiento (clipping, cosine, best-state)
 │   ├── generators.py          #   baselines + VAE/RealNVP; WGAN legado reproducible
-│   ├── diffusion_ts.py        #   Diffusion-TS R61 activo + prototipo R81 exploratorio
+│   ├── diffusion_ts.py        #   Diffusion-TS R61: denoiser, calendario de ruido y DDIM
 │   ├── gen_audit.py           #   auditoría de FIDELIDAD (hechos estilizados, KS/W1, corr)
 │   ├── gen_utility.py         #   auditoría de UTILIDAD (TSTR frente a TRTR)
 │   ├── malla.py               #   barrido real×sintético, reanudable con checkpoint
@@ -270,8 +270,8 @@ sola talla confunde "esta familia es mejor" con "esta red tenía el tamaño adec
 
 **Auditoría de generadores R61** (notebook 03; referencia real: curtosis 25,24 ·
 ACF|r| 0,062). La comparación activa es `[X60 | y]` para todos: Diffusion-TS usa 60 tokens
-temporales y un token especial para `y`. El prototipo R81 se conserva como exploración,
-pero queda excluido porque habría recibido 20 retornos que ningún rival ve.
+temporales y un token especial para `y`. Una exploración previa (R81) quedó descartada
+porque habría recibido 20 retornos que ningún rival ve; no se versiona.
 
 | Generador | sd(X) | Curtosis | ACF\|r\| lag1 | AUC | ratio TSTR/TRTR |
 |---|---:|---:|---:|---:|---:|
