@@ -206,14 +206,10 @@
 </main>
 
 <footer>
-  Generado a partir de los notebooks y de <code>data/processed/</code> /
-  <code>reports/figures/</code> tal y como están en el repo. Las cifras de cada nodo son
-  las que quedaron impresas en la última ejecución registrada de cada notebook.
-  <br />
-  En una versión anterior de este mapa, la auditoría del notebook 03 llegaba al 04 por una
-  flecha <em>discontinua</em> rotulada «sin fichero — cifras copiadas a mano»: era el único
-  borde del grafo que no correspondía a ningún artefacto en disco. Ya no existe. El 03
-  persiste <code>auditoria_nb03.csv</code> y <code>tstr_nb03.csv</code>, y el 04 los lee.
+  Corte del repositorio: <code>b6659df · 2 sep 2026</code>. Reconstruido a partir de los
+  notebooks ejecutados y de los artefactos presentes en <code>data/processed/</code> y
+  <code>reports/figures/</code>. Las cifras reflejan la campeona <code>gru_l</code> y las dos
+  mallas vigentes del notebook 04: proporciones finas y presupuestos sintéticos absolutos.
 </footer>
 
 <script>
@@ -312,15 +308,15 @@
         list:["predict_global_mean","predict_persistence","HarOLS","regression_metrics"] } },
 
     { id:"s_models", col:3, y:90, type:"script", title:"models.py",
-      sub:"src/ · importado por 02_downstream_baselines", stat:"MLP · ConvNet1D · build_model",
+      sub:"src/ · importado por 02_downstream_baselines", stat:"MLP · CNN 1-D · GRU",
       detail:{
-        que:"Las cuatro arquitecturas candidatas (MLP y CNN 1-D, chicas y grandes) para el modelo downstream. build_model(nombre, **kwargs) las reconstruye por nombre — así la arquitectura congelada se puede recrear siempre igual desde el json de referencia.",
-        list:["MLP","ConvNet1D","build_model","count_params"] } },
+        que:"Las seis arquitecturas candidatas del modelo downstream: tres familias —MLP, CNN 1-D y GRU— en dos tamaños cada una. build_model(nombre, **kwargs) reconstruye la campeona por nombre y parámetros desde el contrato JSON.",
+        list:["MLP","ConvNet1D","GRUNet","build_model","count_params"] } },
 
     { id:"n8", col:3, y:180, type:"proc", title:"02_downstream_baselines.ipynb",
       sub:"usa baselines · models · training · eda · netviz", stat:"campeona gru_l · R² test 0,472",
       detail:{
-        que:"Fija el suelo (3 baselines sin redes) y la arquitectura downstream que queda congelada para el resto del taller. 4 candidatas (MLP/CNN chicas y grandes), elegida por MSE en validación real, reentrenada con 3 semillas para medir ruido de optimización.",
+        que:"Fija el suelo (3 baselines sin redes) y la arquitectura downstream que queda congelada para el resto del taller. Compara 6 candidatas —MLP, CNN y GRU, chicas y grandes— por MSE de validación real; la campeona se reentrena con 3 semillas para medir ruido de optimización.",
         stats:[["HAR-RV (suelo) test R²","0,359"],["campeona","gru_l — 84.601 params"],["test R² (3 semillas)","0,472 ± 0,005"],["umbral de ruido","±0,006"]] } },
 
     { id:"s_training", col:3, y:345, type:"script", title:"training.py",
@@ -330,9 +326,9 @@
         list:["train_model","predict","get_device","TrainResult"] } },
 
     { id:"s_netviz", col:3, y:425, type:"script", title:"netviz.py",
-      sub:"src/ · importado por 02_downstream_baselines y 03_generadores", stat:"8 diagramas · PlotNeuralNet (TikZ)",
+      sub:"src/ · importado por 02_downstream_baselines y 03_generadores", stat:"10 diagramas · PlotNeuralNet (TikZ)",
       detail:{
-        que:"Genera las fichas visuales de las redes (las 4 candidatas downstream, los 3 generadores neuronales y el pipeline de datos) recorriendo los nn.Module de verdad: la cadena 60→30→15→7 de la CNN campeona sale de la aritmética de las capas, no de una constante escrita a mano. Compila TikZ con PlotNeuralNet (MIT, vendorizado en vendor/ porque no está en PyPI); pdflatex es una dependencia OPCIONAL — sin él se avisa y se reutiliza el PNG ya versionado.",
+        que:"Genera las fichas visuales de las redes (las 6 candidatas downstream, los 3 generadores neuronales y el pipeline de datos) recorriendo los nn.Module reales. Compila TikZ con PlotNeuralNet (MIT, vendorizado en vendor/ porque no está en PyPI); pdflatex es opcional — sin él se avisa y se reutiliza el PNG ya versionado.",
         list:["bloques_desde_modelo","diagrama_vae","diagrama_wgan","diagrama_realnvp","diagrama_pipeline","render"],
         nota:"El notebook 03 le pasa los generadores YA ENTRENADOS (no los valores por defecto de las clases): RealNVP se entrena con n_layers=6, no con el 8 por defecto — dibujar el default habría inventado dos capas inexistentes." } },
 
@@ -340,7 +336,7 @@
       sub:"usa generators · gen_audit · gen_utility · training · eda · netviz", stat:"6 generadores, auditados",
       detail:{
         que:"Entrena y audita 6 generadores de la distribución conjunta [X | y] sobre las 102.406 ventanas de train: jitter, gaussiana, block bootstrap, VAE, WGAN-GP y RealNVP. La auditoría cubre los dos ejes que este caso de uso exige: <strong>fidelidad</strong> (¿se parecen al dato real?) y <strong>utilidad</strong> (¿sirven para entrenar?). No persiste muestras —el 04 las recrea— pero sí sus dos tablas de resultados.",
-        stats:[["RealNVP — AUC · TSTR","0,65 · 0,89 (mejor red)"],["gaussiana — AUC · TSTR","0,96 · −0,36 (peor)"],["WGAN-GP — TSTR","−0,21"],["coste (CPU)","VAE 6 min · WGAN 22 min · flow 31 min"]],
+        stats:[["RealNVP — AUC · TSTR","0,65 · 0,95 (mejor red)"],["jitter — AUC · TSTR","0,50 · 0,92"],["gaussiana — AUC · TSTR","0,96 · −0,39 (peor)"],["WGAN-GP — TSTR","+0,25"]],
         nota:"El tercer eje del marco de auditoría, la <strong>privacidad</strong>, queda fuera de alcance y así se declara en el notebook: son precios de mercado públicos, no registros personales, de modo que no hay secreto que un generador pueda filtrar. Y los generadores se reajustan desde cero en cada celda de la malla del 04 — este notebook publica cifras, no pesos reutilizables." } },
 
     { id:"s_generators", col:3, y:650, type:"script", title:"generators.py",
@@ -366,18 +362,18 @@
     { id:"n10", col:4, y:60, type:"data", title:"downstream_reference.json",
       sub:"data/processed/ · 1,5 KB", stat:"arquitectura + métricas congeladas",
       detail:{
-        que:"La arquitectura campeona (cnn, channels=[32,64,128], fc=128), sus hiperparámetros de entrenamiento y las métricas de las 3 semillas — el contrato que el notebook 04 ya no puede tocar.",
-        stats:[["arch","cnn · [32,64,128] · fc128"],["test_r2 medio","0,456"],["semilla guardada","44"]] } },
+        que:"La arquitectura campeona (GRU de 3 capas, hidden=72, fc=72), su receta de entrenamiento a 100 épocas y las métricas de 3 semillas — el contrato que los notebooks 03 y 04 consumen sin alterarlo.",
+        stats:[["arch","gru · h72 · 3 capas · fc72"],["test_r2 medio","0,472"],["semilla guardada","43"],["receta","100 épocas · cosine · clip 1,0"]] } },
 
     { id:"n11", col:4, y:180, type:"data", title:"downstream_reference.pt",
-      sub:"data/processed/ · 277 KB", stat:"pesos de la semilla 44",
+      sub:"data/processed/ · 334 KB", stat:"pesos de la semilla 43",
       detail:{
         que:"Pesos entrenados de la arquitectura campeona (semilla mediana en validación). Se guarda como referencia, pero el notebook 04 reentrena desde cero en cada celda de la malla — no los reutiliza." } },
 
-    { id:"n12", col:4, y:300, type:"fig", title:"7 figuras",
-      sub:"reports/figures/ · 09–10, 16–19, 23", stat:"convergencia · pred vs real · arquitecturas",
+    { id:"n12", col:4, y:300, type:"fig", title:"9 figuras",
+      sub:"reports/figures/ · 09–10, 16–19, 23, 29–30", stat:"convergencia · pred vs real · 6 arquitecturas",
       detail:{
-        que:"Curvas de loss de las 4 arquitecturas candidatas y el hexbin predicción-vs-realidad de la campeona en test (09–10); más la ficha visual de esas mismas 4 candidatas y el diagrama del pipeline de datos, generadas por netviz.py a partir de los nn.Module reales (16–19, 23).",
+        que:"Curvas de loss de las 6 arquitecturas candidatas y el hexbin predicción-vs-realidad de la campeona GRU en test (09–10); más las fichas visuales de MLP, CNN y GRU en dos tamaños y el diagrama del pipeline de datos (16–19, 23, 29–30).",
         list:["09_convergencia_candidatas.png","10_pred_vs_real.png","16_arq_mlp_s.png","17_arq_mlp_l.png","18_arq_cnn_s.png","19_arq_cnn_l.png","29_arq_gru_s.png","30_arq_gru_l.png","23_pipeline_datos.png"] } },
 
     { id:"n13", col:4, y:440, type:"fig", title:"9 figuras",
@@ -398,44 +394,56 @@
       sub:"data/processed/ · 2 KB + 1 KB", stat:"21 filas — 7 brazos × 3 semillas",
       detail:{
         que:"El resultado bruto de la auditoría de utilidad: un brazo TRTR (datos reales) y seis TSTR (uno por generador), cada uno con tres semillas. El fichero de resumen agrega por brazo y añade el ratio TSTR/TRTR.",
-        stats:[["TRTR — referencia","R² 0,485 ± 0,008"],["mejor generador","RealNVP — ratio 0,89"],["utilidad negativa","WGAN-GP −0,21 · gaussiana −0,36"]],
-        nota:"Se escribe fila a fila, así que relanzar la celda reanuda sin reentrenar lo ya hecho — el mismo patrón de checkpoint que usa la malla del 04." } },
+        stats:[["TRTR — referencia","R² 0,504 ± 0,008"],["mejor generador","RealNVP — ratio 0,947"],["jitter","ratio 0,923"],["utilidad negativa","gaussiana −0,388"]],
+        nota:"El notebook recalcula los 21 brazos completos cuando cambia la campeona: la clave de una reanudación simple no contiene la arquitectura y podría mezclar resultados de dos modelos downstream." } },
 
     { id:"s_malla", col:5, y:210, type:"script", title:"malla.py",
-      sub:"src/ · importado por 04_malla_sintetica", stat:"plan_de_malla · ejecutar_malla",
+      sub:"src/ · importado por 04_malla_sintetica", stat:"ratios · conteos absolutos · checkpoint",
       detail:{
-        que:"El barrido experimental completo: arma el plan de celdas (N_real × ratio × generador × semilla), las ejecuta con checkpointing en CSV (relanzar reanuda donde se quedó) y calcula el delta pareado frente a solo-real.",
-        list:["plan_de_malla","ejecutar_malla","resumir","delta_vs_solo_real","delta_pareado","umbral_ruido_por_n"] } },
+        que:"Motor de las dos mallas: una fija el ratio sintético/real y la otra fija un conteo absoluto de sintéticos mientras cambia N_real. Ejecuta con checkpoint por celda y una firma de receta que impide reutilizar resultados de otra campeona.",
+        list:["plan_de_malla","plan_de_curvas","ejecutar_malla","firma_receta","resumir","delta_vs_solo_real","delta_pareado","umbral_ruido_por_n"] } },
 
     { id:"n14", col:5, y:300, type:"proc", title:"04_malla_sintetica.ipynb",
-      sub:"usa malla · training · eda", stat:"117 celdas · malla REDUCIDA",
+      sub:"usa malla · training · eda", stat:"333 ratios + 465 curvas",
       detail:{
-        que:"La pregunta del taller. Por cada (N_real, generador, ratio, semilla): submuestrea N_real ventanas reales por fecha, reentrena el generador SOLO con esas, genera ratio×N_real ventanas sintéticas, entrena la arquitectura congelada sobre la mezcla y evalúa en el test real intocado. Su §2.4 cruza las ocho métricas del notebook 03 —leídas de CSV— contra la ganancia medida.",
-        stats:[["malla REDUCIDA","3 N × 3 ratios × 6 generadores × 3 semillas"],["celdas","117 (2,8 min en RTX 5070)"],["N reales probados","250 · 1.000 · 3.000"],["mejor predictor de la ganancia","ratio TSTR — Spearman +0,94"]],
-        nota:"Hallazgo central: por debajo de ~1.000 ventanas reales el sintético no ayuda (y a menudo empeora); el RealNVP es el único generador que mejora de forma consistente por encima de ese umbral, y la gaussiana empeora siempre. Y el corolario que cierra el círculo: la auditoría del 03 —4 minutos— anticipa el orden de mérito que esta malla tarda horas en establecer." } },
+        que:"Ejecuta dos vistas complementarias. RATIOS_FINOS barre seis proporciones sintético/real entre 0,25× y 5× con N_real=250, 1.000 y 3.000; la malla de curvas fija entre 500 y 20.000 sintéticos y recorre cinco niveles de reales hasta 20.000. En cada celda el generador se reajusta solo con el real disponible y la GRU congelada se evalúa contra dato real.",
+        stats:[["RATIOS_FINOS","333 celdas · 3 N · 6 ratios · 3 semillas"],["curvas absolutas","465 celdas · 5 N · 5 presupuestos · 3 semillas"],["veredictos ratios","14 mejoran · 8 empeoran · 86 n/c"],["mejor predictor","corr(X,X) en rangos · Spearman −0,89"]],
+        nota:"Hallazgo central: con 250 y 1.000 ventanas la inestabilidad entre semillas domina; 13 de las 14 mejoras aparecen con 3.000 reales. RealNVP y jitter concentran la señal positiva, mientras la gaussiana empeora al aumentar su peso. No aparece un óptimo interior: el signo lo fija la fidelidad del generador." } },
 
-    { id:"n15", col:6, y:120, type:"data", title:"malla_ratios_finos.csv",
-      sub:"data/processed/ · 13 KB", stat:"117 filas — una por celda",
+    { id:"n15", col:6, y:70, type:"data", title:"malla_ratios_finos.csv",
+      sub:"data/processed/ · 41 KB", stat:"333 filas — una por celda",
       detail:{
-        que:"Resultado crudo de cada celda de la malla: n_real, generador, ratio, semilla, val_mse, test_r2, época del mejor peso, segundos de entrenamiento.",
-        stats:[["filas","117"],["se reanuda solo","sí — cada celda se escribe al terminar"]] } },
+        que:"Resultado crudo de la malla de proporciones: N_real, generador, ratio realizado, semilla, presupuestos, métricas, mejor época, tiempo y firma de receta.",
+        stats:[["filas","333"],["ratios nominales","0 · 0,25 · 0,5 · 0,75 · 1 · 3 · 5"],["N_real","250 · 1.000 · 3.000"],["checkpoint","una fila al terminar cada celda"]] } },
 
-    { id:"n16", col:6, y:250, type:"data", title:"malla_ratios_finos_resumen.csv",
-      sub:"data/processed/ · 3 KB", stat:"media / sd de R² entre semillas",
+    { id:"n16", col:6, y:190, type:"data", title:"malla_ratios_finos_resumen.csv",
+      sub:"data/processed/ · 9 KB", stat:"111 grupos · media / sd entre semillas",
       detail:{
-        que:"Agregado por (n_real, generador, ratio): media y desviación de test_r2 entre las 3 semillas — la tabla que alimenta la curva de aprendizaje." } },
+        que:"Agregado por (N_real, generador, ratio): media y desviación de R² entre las 3 semillas, MSE medio y tamaño de entrenamiento. Alimenta las figuras 14 y 15." } },
 
-    { id:"n17", col:6, y:380, type:"data", title:"malla_ratios_finos_delta.csv",
-      sub:"data/processed/ · 4 KB", stat:"Δ R² pareado + veredicto",
+    { id:"n17", col:6, y:310, type:"data", title:"malla_ratios_finos_delta.csv",
+      sub:"data/processed/ · 13 KB", stat:"108 Δ R² medios vs. solo real",
       detail:{
-        que:"Comparación pareada por semilla contra la celda de solo-real (misma semilla): cancela la varianza del submuestreo y deja solo el efecto del dato sintético. Exige |t| ≥ 2,5 para hablar de efecto.",
-        stats:[["celdas agregadas","36"],["mejoran","5"],["empeoran","11"],["no concluyentes","20"]] } },
+        que:"Diferencia entre el R² medio de cada mezcla y el R² medio de solo-real para el mismo N. El notebook hace además el contraste pareado por semilla —no persistido en este CSV— y exige |t| ≥ 2,5 para emitir veredicto.",
+        stats:[["comparaciones agregadas","108"],["pareado: mejoran","14"],["pareado: empeoran","8"],["pareado: no concluyentes","86"]] } },
 
-    { id:"n18", col:6, y:510, type:"fig", title:"2 figuras",
-      sub:"reports/figures/ · 14–15", stat:"Δ R² por escasez · curva de aprendizaje",
+    { id:"n21", col:6, y:430, type:"data", title:"malla_curvas.csv",
+      sub:"data/processed/ · 59 KB", stat:"465 filas · presupuesto absoluto",
       detail:{
-        que:"La figura central del taller: ganancia frente a proporción de sintéticos, un panel por nivel de escasez; y la curva de aprendizaje R² vs. ventanas reales disponibles, con el techo de 102k reales.",
-        list:["14_delta_r2_por_escasez.png","15_curva_aprendizaje.png"] } }
+        que:"Resultado crudo de la malla complementaria: mantiene fijo N_synth mientras recorre N_real, de modo que se pueden trazar curvas de error frente a datos reales sin que cambie el presupuesto sintético.",
+        stats:[["filas","465"],["N_real","250 · 1.000 · 3.000 · 10.000 · 20.000"],["N_synth","0 · 500 · 1.000 · 3.000 · 7.000 · 20.000"],["ratio máximo","80×"]] } },
+
+    { id:"n22", col:6, y:550, type:"data", title:"malla_curvas_resumen.csv",
+      sub:"data/processed/ · 14 KB", stat:"155 grupos · media / sd entre semillas",
+      detail:{
+        que:"Agregado de la malla de presupuestos absolutos. Sostiene las curvas de error de las figuras 27–28 y el análisis de convergencia al aumentar los datos reales.",
+        stats:[["grupos","155"],["celdas de referencia","15"],["celdas con sintéticos","450"]] } },
+
+    { id:"n18", col:6, y:670, type:"fig", title:"4 figuras",
+      sub:"reports/figures/ · 14–15, 27–28", stat:"ganancia · aprendizaje · curvas de error",
+      detail:{
+        que:"Dos figuras para la malla de ratios —ganancia frente a proporción y curva de aprendizaje— y dos para la malla absoluta —error frente a N_real, por generador y en comparación conjunta—.",
+        list:["14_delta_r2_por_escasez.png","15_curva_aprendizaje.png","27_curvas_error_por_generador.png","28_curvas_error_todos.png"] } }
   ];
 
   var EDGES = [
@@ -486,7 +494,8 @@
     // correspondía a ningún artefacto en disco.
     { from:"n19", to:"n14" }, { from:"n20", to:"n14" },
     // notebook 04 -> resultados finales
-    { from:"n14", to:"n15" }, { from:"n14", to:"n16" }, { from:"n14", to:"n17" }, { from:"n14", to:"n18" }
+    { from:"n14", to:"n15" }, { from:"n14", to:"n16" }, { from:"n14", to:"n17" },
+    { from:"n14", to:"n21" }, { from:"n14", to:"n22" }, { from:"n14", to:"n18" }
   ];
 
   var byId = {};
