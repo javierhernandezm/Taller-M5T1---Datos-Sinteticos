@@ -1,0 +1,51 @@
+{
+  "config": {
+    "n_real": 3000,
+    "ratio": 5,
+    "n_synth": 15000,
+    "train_steps": 3000,
+    "sample_steps": 50,
+    "seeds": [
+      42,
+      43,
+      44
+    ],
+    "path_coverage": 0.9877448586996855,
+    "sampling_unit": "trayectoria física de 81 retornos"
+  },
+  "delta_r2_mean": 0.056831041971842466,
+  "delta_r2_sd": 0.013438754852466595,
+  "delta_r2_ci95": [
+    0.023447324243862457,
+    0.09021475969982248
+  ],
+  "wins": 3,
+  "pairs": 3,
+  "conclusion": "supera el control real en las tres semillas: merece entrar en la malla completa",
+  "historical_same_cell": [
+    {
+      "generador": "jitter",
+      "test_r2_media": 0.3875210682551065,
+      "test_r2_sd": 0.0595465543011463,
+      "n_seeds": 3
+    },
+    {
+      "generador": "realnvp",
+      "test_r2_media": 0.419455627600352,
+      "test_r2_sd": 0.0354141455554555,
+      "n_seeds": 3
+    },
+    {
+      "generador": "vae",
+      "test_r2_media": 0.2722769180933634,
+      "test_r2_sd": 0.0150231417194808,
+      "n_seeds": 3
+    },
+    {
+      "generador": "wgan_gp",
+      "test_r2_media": 0.1677257815996805,
+      "test_r2_sd": 0.1253229544775448,
+      "n_seeds": 3
+    }
+  ]
+}

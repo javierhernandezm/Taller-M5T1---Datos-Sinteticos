@@ -1,0 +1,26 @@
+{
+  "train_steps": 3000,
+  "n_fit": 102406,
+  "n_synth": 102406,
+  "fit_seeds": [
+    42,
+    43,
+    44
+  ],
+  "run_downstream": true,
+  "sample_steps": 50,
+  "batch_size": 256,
+  "d_model": 64,
+  "n_heads": 4,
+  "n_layers": 3,
+  "ff_mult": 4,
+  "profile": "pilot",
+  "upstream_commit": "007a829a7494133662693676133e059785e1ba3a",
+  "representation": "81 retornos físicos: X60 + futuro21; y se deriva, no se modela",
+  "diffusion_steps": 500,
+  "spectral_weight": 0.1,
+  "ema_decay": 0.995,
+  "annualization": 252,
+  "experiment_id": "17961b1df3",
+  "effective_n_fit": 101151
+}
