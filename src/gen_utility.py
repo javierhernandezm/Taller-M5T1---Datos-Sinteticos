@@ -109,6 +109,13 @@ def tstr_trtr(fitted: dict, XY_train: np.ndarray,
 
     Con `ruta_csv` el barrido es reanudable: las filas cuya clave
     (brazo, seed) ya está en el CSV se saltan sin recalcular.
+
+    CUIDADO: esa clave NO incluye la arquitectura de `ref`. Si la campeona
+    del notebook 02 cambia y el CSV de la ejecución anterior sigue en disco,
+    la reanudación da por buenas filas calculadas con OTRO modelo, en
+    silencio. Reanudar solo es seguro dentro de una misma configuración
+    congelada; si `ref` puede haber cambiado, pasar `ruta_csv=None` y
+    escribir el CSV desde fuera.
     """
     n = n_muestras or len(XY_train)
     plan = [{"brazo": b, "seed": s}

@@ -117,6 +117,11 @@ _COLORES: dict[str, tuple[str, str]] = {
     "salida":  (PALETTE["vermillion"], "#F0956B"),
     "latente": (PALETTE["orange"],     "#F3C86B"),
     "ruido":   (PALETTE["yellow"],     "#F7F0A0"),
+    # Okabe-Ito tiene 8 tonos y los 8 anteriores ya estan asignados. El bloque
+    # recurrente usa un tono OSCURO del azul de "conv" en lugar de un color nuevo:
+    # conv y GRU son la misma cosa en la lectura de la figura -el tronco que
+    # recorre la secuencia- y el tono los separa sin salirse de la paleta.
+    "recurrente": ("#004E7C",          PALETTE["sky"]),
 }
 
 
@@ -134,12 +139,12 @@ def _geometria(b: Bloque) -> tuple[float, float, float]:
     """
     if b.kind == "pool":
         width = 1.0
-    elif b.kind == "conv":
+    elif b.kind in ("conv", "recurrente"):
         width = round(1.0 + 0.9 * math.log2(max(b.canales, 1)), 2)
     else:
         width = 1.6
     # fondo: longitud de secuencia (conv) o nº de unidades (vectores)
-    n = b.largo if b.kind in ("conv", "pool", "dato") else b.canales
+    n = b.largo if b.kind in ("conv", "pool", "dato", "recurrente") else b.canales
     depth = round(4.0 + 26.0 * (max(n, 1) / 512.0) ** 0.45, 2)
     return width, 3.0, max(depth, 3.0)
 
@@ -326,7 +331,9 @@ def bloques_desde_modelo(model: nn.Module, in_len: int, prefijo: str = "L") -> l
         raise ValueError(f"{type(model).__name__} no expone submódulos recorribles")
 
     bloques: list[Bloque] = []
-    es_mapa = isinstance(hijos[0], nn.Conv1d)      # (B,C,L) frente a (B,D)
+    # Conv1d y GRU comparten forma de entrada: una secuencia de `in_len` pasos con
+    # 1 canal/feature. El MLP, en cambio, recibe la ventana aplanada.
+    es_mapa = isinstance(hijos[0], (nn.Conv1d, nn.GRU, nn.LSTM, nn.RNN))
     canales, largo = (1, in_len) if es_mapa else (in_len, 1)
 
     bloques.append(Bloque(
@@ -359,6 +366,34 @@ def bloques_desde_modelo(model: nn.Module, in_len: int, prefijo: str = "L") -> l
             bloques.append(Bloque(
                 kind="gap", name=nombre, largo=largo, canales=canales,
                 pie=(f"({canales}, {largo})", "GlobalAvgPool"),
+            ))
+        elif isinstance(capa, (nn.GRU, nn.LSTM, nn.RNN)):
+            # Una caja POR CAPA recurrente, no una sola por el modulo: apilar dos
+            # GRU es una decision de arquitectura y tiene que verse, igual que se
+            # ven los tres bloques conv de la cnn_l. Cada capa devuelve la
+            # secuencia entera de estados ocultos, asi que la forma es (H, L): el
+            # largo NO se reduce, que es justo lo que distingue a la recurrente de
+            # la convolucional con pooling.
+            tipo = type(capa).__name__
+            canales = capa.hidden_size
+            for j in range(capa.num_layers):
+                pie = [f"({canales}, {largo})", f"{tipo} capa {j + 1}/{capa.num_layers}"]
+                # nn.GRU aplica su dropout ENTRE capas, no tras la ultima.
+                if capa.dropout and j < capa.num_layers - 1:
+                    pie.append(f"Dropout p={capa.dropout:g}")
+                bloques.append(Bloque(
+                    kind="recurrente", name=_nodo(f"{prefijo}{i}r{j}"),
+                    etiqueta=str(canales), largo=largo, canales=canales,
+                    pie=tuple(pie),
+                ))
+            # El modelo se queda con el ultimo paso: (H, L) -> (H, 1). Merece caja
+            # propia porque es donde la secuencia deja de serlo, y es el analogo
+            # exacto del GlobalAvgPool de la CNN: mismo papel, distinto criterio
+            # (el ultimo estado en vez de la media sobre el tiempo).
+            largo = 1
+            bloques.append(Bloque(
+                kind="gap", name=_nodo(f"{prefijo}{i}ult"), largo=largo, canales=canales,
+                pie=(f"({canales}, 1)", "último estado", "h[:, -1]"),
             ))
         elif isinstance(capa, nn.Flatten):
             canales, largo = canales * largo, 1   # sin caja: solo contabilidad
@@ -400,7 +435,13 @@ CANDIDATAS: dict[str, tuple[str, dict]] = {
     "mlp_l": ("mlp", {"hidden": (256, 128, 64)}),
     "cnn_s": ("cnn", {"channels": (32, 64)}),
     "cnn_l": ("cnn", {"channels": (32, 64, 128), "fc": 128}),
+    "gru_s": ("gru", {}),
+    "gru_l": ("gru", {"hidden": 72, "layers": 3, "fc": 72}),
 }
+
+
+#: Nombre legible de cada familia, para el titulo de la ficha.
+_FAMILIA = {"mlp": "MLP", "cnn": "CNN 1-D", "gru": "GRU (recurrente)"}
 
 
 def _campeona(cfg: Config) -> tuple[str, dict] | None:
@@ -426,7 +467,7 @@ def _misma_arquitectura(a: tuple[str, dict], b: tuple[str, dict] | None) -> bool
 
 
 def diagrama_candidata(nombre_fig: str, clave: str, cfg: Config, in_len: int) -> Diagrama:
-    """Ficha de una de las cuatro candidatas del notebook 02."""
+    """Ficha de una de las seis candidatas del notebook 02."""
     arch, kwargs = CANDIDATAS[clave]
     model = build_model(arch, in_len=in_len, **kwargs) if arch == "mlp" \
         else build_model(arch, **kwargs)
@@ -436,7 +477,7 @@ def diagrama_candidata(nombre_fig: str, clave: str, cfg: Config, in_len: int) ->
         sub += " · CONGELADA: referencia de la malla real×sintético"
     return Diagrama(
         nombre=nombre_fig,
-        titulo=f"{clave} — {'CNN 1-D' if arch == 'cnn' else 'MLP'}",
+        titulo=f"{clave} — {_FAMILIA[arch]}",
         subtitulo=sub,
         bloques=bloques_desde_modelo(model, in_len, prefijo=clave),
     )
@@ -604,7 +645,7 @@ GENERADORES_03: dict[str, dict] = {
 
 def diagramas_taller(cfg: Config | None = None,
                      generadores: dict | None = None) -> list[Diagrama]:
-    """Los ocho diagramas del taller, en el orden de numeración de figuras.
+    """Los diez diagramas del taller, en el orden de numeración de figuras.
 
     `generadores` acepta el diccionario de instancias YA construidas del
     notebook 03 (`{"vae": VAEGenerator(...), ...}`), que es la forma de
@@ -616,7 +657,14 @@ def diagramas_taller(cfg: Config | None = None,
     cfg = cfg or Config()
     in_len = cfg.window_len
     d = in_len + 1                      # el par conjunto [X | y] que ven los generadores
-    nombres = ["16_arq_mlp_s", "17_arq_mlp_l", "18_arq_cnn_s", "19_arq_cnn_l"]
+    # Las dos GRU van al final de la numeracion (29, 30) y no a continuacion de
+    # las otras candidatas: 20-28 ya estan ocupados por los generadores, el
+    # pipeline y las figuras de auditoria de los notebooks 03 y 04. Meterlas en
+    # bloque con 16-19 obligaria a renumerar media carpeta -y a tocar los cuatro
+    # notebooks-, que es un cambio propio y no de esta rama. Queda como deuda.
+    nombres = ["16_arq_mlp_s", "17_arq_mlp_l", "18_arq_cnn_s", "19_arq_cnn_l",
+               "29_arq_gru_s", "30_arq_gru_l"]
+    assert len(nombres) == len(CANDIDATAS), "un nombre de figura por candidata"
     diags = [diagrama_candidata(n, k, cfg, in_len)
              for n, k in zip(nombres, CANDIDATAS)]
 

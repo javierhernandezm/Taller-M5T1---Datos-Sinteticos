@@ -22,6 +22,8 @@
 \definecolor{blatente}{HTML}{F3C86B}
 \definecolor{cruido}{HTML}{F0E442}
 \definecolor{bruido}{HTML}{F7F0A0}
+\definecolor{crecurrente}{HTML}{004E7C}
+\definecolor{brecurrente}{HTML}{56B4E9}
 
 \begin{document}
 \begin{tikzpicture}
@@ -193,6 +195,6 @@
 \node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] cnnl9-south) {\textbf{(128, 1)} \\ GlobalAvgPool};
 \node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] cnnl11-south) {\textbf{128 unidades} \\ Linear 128->128 \\ ReLU \\ Dropout p=0.1};
 \node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] cnnl14-south) {\textbf{1 unidad} \\ salida \\ Linear 128->1};
-\node[anchor=south west, align=left, inner sep=0pt] at ([yshift=14pt] current bounding box.north west) {\begin{tabular}{@{}l@{}} \bfseries\large cnn\_l — CNN 1-D \\ \mdseries\small 68,225 parámetros · entrada (B, 60) · salida (B,) · CONGELADA: referencia de la malla real×sintético \end{tabular}};
+\node[anchor=south west, align=left, inner sep=0pt] at ([yshift=14pt] current bounding box.north west) {\begin{tabular}{@{}l@{}} \bfseries\large cnn\_l — CNN 1-D \\ \mdseries\small 68,225 parámetros · entrada (B, 60) · salida (B,) \end{tabular}};
 \end{tikzpicture}
 \end{document}

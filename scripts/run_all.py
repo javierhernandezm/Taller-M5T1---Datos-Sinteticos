@@ -47,13 +47,23 @@ def run(path: Path, timeout: int) -> int:
     """Ejecuta un notebook in-place. Devuelve el número de celdas con error."""
     import nbformat
     from nbclient import NotebookClient
+    from nbclient.exceptions import CellExecutionError, CellTimeoutError
 
     nb = nbformat.read(path, as_version=4)
     t0 = time.time()
     # cwd = carpeta del notebook, para que las rutas relativas se comporten
     # igual que al abrirlo en JupyterLab.
-    NotebookClient(nb, timeout=timeout, kernel_name="python3",
-                   resources={"metadata": {"path": str(NB_DIR)}}).execute()
+    try:
+        NotebookClient(nb, timeout=timeout, kernel_name="python3",
+                       resources={"metadata": {"path": str(NB_DIR)}}).execute()
+    except (CellExecutionError, CellTimeoutError) as e:
+        # Guardar el notebook PARCIALMENTE ejecutado. Si se deja propagar, el
+        # nbformat.write de abajo no llega a correr y el fichero conserva las
+        # salidas de la ejecución ANTERIOR: el notebook queda mostrando
+        # resultados viejos junto a código nuevo, sin ninguna señal de que la
+        # ejecución fracasó. Guardándolo, el traceback queda dentro de la celda
+        # que falló y las anteriores conservan sus salidas nuevas.
+        print(f"  ! {path.name}: {type(e).__name__}; se guarda lo ejecutado")
     nbformat.write(nb, path)
 
     errores = [o for c in nb.cells if c.cell_type == "code"
@@ -69,10 +79,31 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     ap.add_argument("prefijos", nargs="*",
                     help="prefijos numéricos a ejecutar (p. ej. 02 03); vacío = todos")
-    ap.add_argument("--timeout", type=int, default=7200,
-                    help="segundos máximos por celda (por defecto 7200)")
+    # 12 h por celda. La celda de la malla del notebook 04 son cientos de
+    # entrenamientos en una sola celda y supera holgadamente las 2 h anteriores.
+    # Las mallas son reanudables, así que un timeout corto no pierde el trabajo
+    # hecho, pero obliga a relanzar sin necesidad.
+    ap.add_argument("--timeout", type=int, default=43200,
+                    help="segundos máximos por celda (por defecto 43200)")
     ap.add_argument("--list", action="store_true", help="listar notebooks y salir")
     args = ap.parse_args()
+
+    # Banner de entorno. Este script es el punto de entrada de
+    # reproducibilidad del repo, y el kernel que arranca es el que resuelva
+    # el kernelspec "python3" en el PATH: lanzarlo con otro intérprete
+    # (una base de conda, por ejemplo) produce notebooks que se ejecutan sin
+    # error, se ven bien y NO reproducen, porque las versiones de torch y
+    # pyarrow no son las del pyproject. Imprimirlo cuesta nada y hace el
+    # fallo visible en la primera línea del log.
+    print(f"Intérprete : {sys.executable}")
+    for mod in ("torch", "pandas", "pyarrow", "numpy"):
+        try:
+            print(f"  {mod:8s} {__import__(mod).__version__}")
+        except ImportError:
+            print(f"  {mod:8s} (no instalado)")
+    if not (Path(sys.prefix) / "pyvenv.cfg").exists():
+        print("  ! No parece un entorno virtual del proyecto. "
+              "Lo esperado es `uv run python scripts/run_all.py`.")
 
     todos = notebooks()
     if args.list:

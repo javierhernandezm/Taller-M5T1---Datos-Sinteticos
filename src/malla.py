@@ -42,6 +42,8 @@ no la malla entera.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import time
 from pathlib import Path
 
@@ -59,7 +61,27 @@ from .training import predict, train_model
 
 #: Columnas del CSV de resultados. El orden es el de lectura humana.
 COLUMNAS = ["n_real", "generador", "ratio", "seed", "n_synth", "n_train",
-            "val_mse", "test_mse", "test_mae", "test_r2", "epoca_mejor", "segundos"]
+            "val_mse", "test_mse", "test_mae", "test_r2", "epoca_mejor", "segundos",
+            "receta"]
+
+
+def firma_receta(ref: dict) -> str:
+    """Huella corta de la configuración congelada (arquitectura + entrenamiento).
+
+    Existe porque la clave de reanudación —(n_real, generador, n_synth, seed)—
+    NO identifica con QUÉ modelo se calculó la celda. Sin esta huella, cambiar
+    la campeona en el notebook 02 y relanzar la malla daba por hechas las filas
+    de la ejecución anterior: el CSV acababa mezclando dos modelos distintos y
+    las tablas promediaban sobre la mezcla, sin un solo aviso. Es el mismo fallo
+    que tenía la reanudación del TSTR en el notebook 03.
+
+    Entra también `train_kwargs`: cambiar el horizonte de épocas invalida los
+    resultados igual que cambiar la arquitectura.
+    """
+    canon = json.dumps({"arch": ref["arch"], "arch_kwargs": ref["arch_kwargs"],
+                        "train_kwargs": ref["train_kwargs"]},
+                       sort_keys=True, default=str)
+    return hashlib.sha1(canon.encode("utf-8")).hexdigest()[:8]
 
 #: Etiqueta de la celda sin datos sintéticos (el punto de referencia de cada N).
 SOLO_REAL = "ninguno"
@@ -192,6 +214,7 @@ def ejecutar_celda(*, n_real: int, generador: str, seed: int,
     m = regression_metrics(y_test_fisico, p)
 
     return {"n_real": n_real, "generador": generador, "ratio": ratio, "seed": seed,
+            "receta": firma_receta(ref),
             "n_synth": n_synth, "n_train": len(X_mix),
             "val_mse": res.best_val, "test_mse": m["mse"], "test_mae": m["mae"],
             "test_r2": m["r2"], "epoca_mejor": res.best_epoch,
@@ -255,11 +278,26 @@ def ejecutar_malla(plan: list[dict], ruta_csv: Path, *, verbose: bool = True,
     """Ejecuta el plan escribiendo cada celda al CSV en cuanto termina.
 
     Reanudable: las celdas cuya clave (n_real, generador, ratio, seed) ya
-    figura en el CSV se saltan sin recalcular.
+    figura en el CSV **y fueron calculadas con la misma receta congelada** se
+    saltan sin recalcular. Las filas de otra receta se descartan y se
+    recalculan: ver `firma_receta`. Un CSV anterior a esta columna se trata
+    como "receta desconocida", que es lo prudente.
     """
     ruta_csv = Path(ruta_csv)
+    firma = firma_receta(contexto["ref"])
     if ruta_csv.exists():
         hechas = pd.read_csv(ruta_csv)
+        if "receta" not in hechas.columns:
+            hechas["receta"] = None
+        vigentes = hechas[hechas["receta"] == firma]
+        ajenas = len(hechas) - len(vigentes)
+        if ajenas:
+            # Se reescribe el CSV: dejar conviviendo dos recetas haría que
+            # resumir() promediase sobre modelos distintos.
+            print(f"  ! {ajenas} filas de {ruta_csv.name} son de otra receta "
+                  f"congelada (la de ahora es {firma}): se descartan y recalculan.")
+            vigentes.to_csv(ruta_csv, index=False)
+        hechas = vigentes
         clave = set(zip(hechas.n_real, hechas.generador, hechas.n_synth, hechas.seed))
     else:
         hechas, clave = pd.DataFrame(columns=COLUMNAS), set()

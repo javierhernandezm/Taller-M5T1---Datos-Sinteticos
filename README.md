@@ -47,7 +47,7 @@ taller_b5t1/
 │   ├── auditoria_nb03.csv            #   tabla de fidelidad de los 6 generadores
 │   └── tstr_nb03.csv                 #   utilidad TSTR/TRTR, una fila por brazo y semilla
 ├── reports/figures/           # figuras exportadas por los notebooks (versionadas)
-│   └── tex/                   #   fuente TikZ y PDF vectorial de los diagramas 16-23
+│   └── tex/                   #   fuente TikZ y PDF vectorial de los diagramas de arquitectura
 ├── vendor/PlotNeuralNet/      # PlotNeuralNet (MIT), vendorizado: no está en PyPI
 ├── tests/
 │   ├── test_netviz.py         # pruebas de los diagramas (no requieren LaTeX)
@@ -130,20 +130,26 @@ notebook 03 entrena tres redes generativas); en GPU, uno o dos órdenes de magni
 
 ### Diagramas de arquitectura
 
-Las figuras 16–23 de `reports/figures/` son las fichas visuales de las redes: las cuatro
-candidatas downstream, los tres generadores neuronales y el pipeline de datos. Se dibujan
-con [PlotNeuralNet](https://github.com/HarisIqbal88/PlotNeuralNet) (MIT), vendorizado en
+Las figuras 16–23 y 29–30 de `reports/figures/` son las fichas visuales de las redes: las
+seis candidatas downstream (16–19 y 29–30), los tres generadores neuronales (20–22) y el
+pipeline de datos (23). Se dibujan con
+[PlotNeuralNet](https://github.com/HarisIqbal88/PlotNeuralNet) (MIT), vendorizado en
 `vendor/PlotNeuralNet/` porque no está publicado en PyPI.
+
+Las dos GRU llevan número 29–30 y no 20–21 por deuda de numeración: esos huecos ya
+estaban ocupados cuando se añadieron, y renumerar la carpeta obliga a tocar los cuatro
+notebooks. Pendiente de un cambio propio.
 
 ```bash
 uv run python scripts/make_arch_figures.py           # solo lo que haya cambiado
-uv run python scripts/make_arch_figures.py --force   # recompila las ocho
+uv run python scripts/make_arch_figures.py --force   # recompila las diez
 uv run python scripts/make_arch_figures.py --list    # ver qué genera
 ```
 
 **No son dibujos.** `src/netviz.py` recorre los `nn.Module` de verdad y calcula cada cifra
-con la aritmética real de la convolución y el pooling: la cadena 60 → 30 → 15 → 7 de la CNN
-campeona no está escrita en ninguna parte. En un repo cuya tesis es *"la arquitectura queda
+con la aritmética real de la convolución, el pooling y la recurrencia: la cadena
+60 → 30 → 15 → 7 de la CNN grande no está escrita en ninguna parte, y que la GRU mantenga
+la secuencia en 60 hasta el último estado tampoco — sale de recorrer las capas. En un repo cuya tesis es *"la arquitectura queda
 congelada y solo cambian los datos"*, una figura capaz de desviarse en silencio del código
 sería una mentira documental. Por lo mismo, el sello **CONGELADA** se decide leyendo
 `downstream_reference.json`, y el notebook 03 pasa sus generadores ya entrenados para que
@@ -226,68 +232,100 @@ personas no se pisen:
 
 ## Resultados hasta ahora
 
-**Modelo downstream congelado** (notebook 02): CNN 1-D de 68k parámetros, R² en test
-0,456 ± 0,006 (3 semillas), frente a 0,359 de HAR-RV y 0,120 de persistencia.
+**Modelo downstream congelado** (notebook 02): **GRU de 85k parámetros** (3 capas, h=72),
+R² en test 0,472 ± 0,005 (3 semillas), frente a 0,359 de HAR-RV y 0,120 de persistencia.
+
+La búsqueda compara **tres familias en dos tallas cada una** — comparar familias con una
+sola talla confunde "esta familia es mejor" con "esta red tenía el tamaño adecuado":
+
+| candidata | params | val MSE |
+|---|---:|---:|
+| mlp_s | 16.129 | 0,1104 |
+| mlp_l | 56.833 | 0,1163 |
+| cnn_s | 14.721 | 0,0949 |
+| cnn_l | 68.225 | 0,0946 |
+| gru_s | 42.049 | 0,0918 |
+| **gru_l** | **84.601** | **0,0912** |
+
+> **Las dos recurrentes baten a las cuatro anteriores.** El orden de los retornos lleva
+> señal que ni el MLP (invariante al orden) ni la CNN (solo vecindarios locales)
+> capturan. Ese resultado es sólido: la brecha con `cnn_l` (0,003) es varias veces la
+> dispersión entre semillas.
+>
+> **Cuál de las dos GRU gana, en cambio, no lo es.** Las separan 0,0006, del orden de esa
+> misma dispersión, y el orden se invierte con solo cambiar de versión de torch (con
+> 2.6.0+cu124 gana `gru_s` por 0,0002; con la 2.11.0+cu128 del `pyproject`, `gru_l` por
+> 0,0006). Se congela `gru_l` porque es la que gana en el entorno declarado del repo, no
+> porque haya evidencia de que sea mejor. La lectura honesta es que **añadir capacidad
+> dentro de la familia no compra nada medible**: lo que decide es el sesgo inductivo
+> recurrente, no el tamaño.
 
 **Auditoría de generadores** (notebook 03; referencia real: curtosis 25,2 · ACF|r| 0,062).
 Dos ejes: **fidelidad** (¿se parecen?) y **utilidad** (¿sirven para entrenar?). El ratio
 TSTR/TRTR es el R² de un modelo entrenado **solo con sintético** dividido por el del mismo
-modelo entrenado con las 102k ventanas reales; 1,0 sería conservar toda la información.
+modelo entrenado con las 92k ventanas reales de train; 1,0 sería conservar toda la
+información. Los dos brazos reciben el MISMO presupuesto de ventanas: sin esa simetría el
+ratio no significa nada.
 
 | Generador | Curtosis | ACF\|r\| lag1 | AUC discrim. | W1 por columna | ratio TSTR/TRTR |
 |---|---:|---:|---:|---:|---:|
-| jitter | 23,6 | 0,058 | 0,50 | 0,026 | 0,91 |
-| gaussiana | 0,03 | −0,015 | 0,96 | 0,236 | **−0,36** |
-| block_bootstrap | 26,2 | 0,125 | 0,76 | 0,057 | 0,64 |
-| VAE | 1,43 | −0,006 | 0,89 | 0,158 | 0,61 |
-| WGAN-GP | 4,43 | −0,013 | 0,83 | 0,095 | **−0,21** |
-| **RealNVP** | **23,2** | **0,042** | **0,65** | **0,057** | **0,89** |
+| jitter | 23,6 | 0,058 | 0,50 | 0,026 | 0,92 |
+| gaussiana | 0,03 | −0,015 | 0,96 | 0,236 | **−0,39** |
+| block_bootstrap | 26,2 | 0,125 | 0,76 | 0,057 | 0,62 |
+| VAE | 1,43 | −0,006 | 0,89 | 0,158 | 0,66 |
+| WGAN-GP | 4,43 | −0,013 | 0,83 | 0,095 | 0,25 |
+| **RealNVP** | **23,2** | **0,042** | **0,65** | **0,057** | **0,95** |
 
-> **Dos de los seis generadores tienen utilidad negativa.** Un modelo entrenado con las
-> muestras de la gaussiana o del WGAN-GP es *peor que predecir la media constante*. La
-> fidelidad no es un lujo estético: un generador que no reproduce las colas no es neutro,
-> es tóxico. Y el WGAN-GP es el caso más instructivo — su pérdida converge limpiamente y su
-> modelo downstream entrena 35 épocas mejorando contra su propia validación sintética, para
-> aterrizar en R² −0,04 sobre datos reales. **Converger sobre datos sintéticos no dice nada
-> sobre la utilidad real.**
+> **La gaussiana tiene utilidad negativa:** un modelo entrenado con sus muestras es *peor
+> que predecir la media constante*. La fidelidad no es un lujo estético — un generador que
+> no reproduce las colas no es neutro, es tóxico.
+>
+> El orden de la columna TSTR reproduce **casi exactamente** el del AUC discriminativo, que
+> se mide sin entrenar un solo modelo downstream: se puede elegir generador en minutos, en
+> lugar de barrer una malla entera.
+>
+> **RealNVP conserva el 95 % de la utilidad y es el único que bate al jitter.** Que el
+> listón sea el jitter —ruido sobre el dato real, quince líneas de código— sigue siendo el
+> dato incómodo de la tabla: las otras dos redes generativas, VAE y WGAN-GP, quedan muy por
+> detrás de él pese a ser mucho más caras.
+>
+> **Nota de vigencia.** Estos números son con la campeona `gru_l` a 100 épocas. Con la
+> anterior (`cnn_l` a 40) el WGAN-GP salía con utilidad **negativa** (−0,21) y aquí sale en
+> +0,25; y el orden entre RealNVP y jitter también depende del downstream. El brazo TSTR
+> mide "cuánto sabe enseñar el generador *a este modelo*", no una propiedad del generador
+> en abstracto — y es la razón de que el TSTR se recalcule entero cuando cambia la
+> arquitectura congelada, en vez de reanudarse desde el CSV.
 
-**Malla real×sintético** (notebook 04; 117 celdas, Δ R² pareado por semilla):
+**Malla real×sintético** (notebook 04; 333 celdas de ratios + 465 de curvas, Δ R² pareado
+por semilla):
 
-> Los datos sintéticos **sí** mejoran el modelo, pero solo por encima de un umbral mínimo
-> de datos reales (entre 250 y 1.000 ventanas) y solo si el generador reproduce las colas.
-> Por debajo de ese umbral, y con generadores que gaussianizan la distribución, el dato
-> sintético **destruye** el modelo. El generador más sofisticado (WGAN-GP) es el más
-> peligroso —deja el R² en negativo con N=250— y el más trivial (ruido sobre datos reales)
-> nunca hace daño.
+| N_real | R² solo real | sd entre semillas | mejoras | empeoras | no concluyentes |
+|---:|---:|---:|---:|---:|---:|
+| 250 | 0,151 | **0,115** | 1 | 3 | 32 |
+| 1.000 | 0,199 | **0,161** | 0 | 0 | 36 |
+| 3.000 | 0,338 | 0,022 | **13** | 5 | 18 |
 
-Y el hallazgo que cierra el círculo: el **discriminative AUC** medido en el notebook 03,
-sin mirar el modelo downstream, **ordena perfectamente** a los seis generadores por su
-ganancia real (Spearman −1,00 con N=1.000). Se puede elegir generador midiendo fidelidad,
-en minutos, en lugar de barrer una malla entera.
+> **Existe un suelo mínimo de datos reales por debajo del cual generar datos no sirve de
+> nada.** Con 250 y 1.000 ventanas la dispersión entre semillas del propio modelo sin
+> sintéticos (0,12–0,16 de R²) es mayor que cualquier efecto buscado: 68 de 72 celdas salen
+> no concluyentes. El beneficio aparece con 3.000 y lo firman `realnvp` (+0,081 con ratio
+> 5×, t=10,6) y `jitter`. Ese umbral **depende del modelo downstream** —con la campeona
+> `cnn_l` anterior caía entre 250 y 1.000— y no es una constante del problema.
 
-La ampliación de la auditoría refuerza ese resultado y lo abarata. El notebook 04 cruza ahora
-**ocho** métricas del 03 —leídas de `auditoria_nb03.csv`, no copiadas a mano— contra la
-ganancia pareada de la malla:
+> **No hay óptimo intermedio de proporción, tampoco por abajo.** Los ratios fraccionarios
+> (0,25× · 0,5× · 0,75×) se añadieron para cubrir el tramo que `[0, 1, 3]` se saltaba
+> entero. Con N=3.000 el efecto ya es significativo en **0,25×** (`jitter` +0,020, t=5,4) y
+> crece de forma monótona hasta 5×: una dosis pequeña ya ayuda, y más ayuda más. Lo que
+> cambia con el ratio no es el óptimo sino el **signo**, y lo fija la fidelidad del
+> generador: la `gaussiana` empeora *más* cuanto más sintético se añade (−0,180 con 5×), que
+> es la firma de un sesgo y no de ruido.
 
-| Métrica medida en el nb03 | N=250 | N=1.000 | N=3.000 | todos |
-|---|---:|---:|---:|---:|
-| **ratio TSTR/TRTR** (utilidad) | +0,71 | **+0,94** | +0,89 | **+0,94** |
-| discriminative AUC | −0,54 | **−1,00** | −0,77 | −0,83 |
-| **Wasserstein por columna** | −0,54 | **−1,00** | −0,77 | −0,83 |
-| **corr(X,X) en rangos** | **−0,83** | −0,83 | −0,83 | **−0,89** |
-| curtosis · ACF de \|r\| | +0,14 · +0,31 | +0,83 · +0,77 | +0,60 · +0,71 | +0,66 · +0,77 |
-| corr(X,X) en Pearson · err_corr(X,y) | −0,20 | +0,14 | +0,26 | +0,14 |
-
-Tres lecturas. **La utilidad TSTR es el mejor predictor de todos (+0,94)**: entrenar el
-modelo solo con sintético —4 minutos— anticipa el orden que la malla de 117 celdas
-establece, con una sola inversión y entre dos generadores que la propia malla declara no
-concluyentes. La **Wasserstein por columna reproduce al discriminative AUC cifra por cifra**
-siendo gratis (60 ordenaciones frente a entrenar un clasificador). Y las métricas de
-dependencia **ingenuas engañan**: `err_corr(X,y)` y la correlación de Pearson entre
-posiciones dan ambas +0,14, con el signo equivocado, porque la gaussiana reproduce la
-covarianza por construcción y aprueba esa columna sin merecerlo; solo la versión en **rangos**
-informa —y es la única métrica que **sobrevive al régimen de N=250**, donde todas las demás
-se desmoronan.
+**La auditoría del notebook 03 predice el resultado de la malla** sin mirar el modelo
+downstream: la correlación de rangos entre `err_corr(X,X)` en rangos y la ganancia pareada
+es −0,89, estable en los tres regímenes, y el ratio TSTR/TRTR llega a +0,89 en N=3.000. Se
+puede elegir generador en minutos en lugar de barrer 333 celdas. Con la cautela de que son
+correlaciones sobre **n = 6** generadores: la señal está en que el orden se repite en los
+tres regímenes, no en el valor puntual.
 
 ---
 
@@ -303,5 +341,5 @@ menos de lo que su ajuste sugiere. Parecerse a train no garantiza generalizar.
 | 01 · Datos, preprocesamiento y EDA crítico | ✅ |
 | 02 · Arquitectura downstream y baselines no generativos | ✅ |
 | 03 · Generadores (baselines simples + familias neuronales) | ✅ |
-| 04 · Malla real×sintético y análisis de resultados | ✅ (malla REDUCIDA: 117 celdas) |
+| 04 · Malla real×sintético y análisis de resultados | ✅ (RATIOS_FINOS 333 celdas + curvas 465) |
 | 05 · Presentación (PDF) | pendiente |
