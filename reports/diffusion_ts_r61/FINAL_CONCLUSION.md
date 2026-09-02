@@ -201,7 +201,23 @@ python scripts/run_diffusion_ts_r61_nb03.py
 python scripts/run_diffusion_ts_r61_mallas.py
 python scripts/promote_diffusion_ts_r61_results.py
 python scripts/update_diffusion_ts_r61_notebooks.py
+python scripts/run_diffusion_ts_r61_notebook03.py
 ```
+
+El quinto paso no es opcional. Los cuatro primeros calculan Diffusion-TS y
+promueven las mallas, pero ninguno produce la tabla de fidelidad publicada:
+`run_diffusion_ts_r61_nb03.py` solo recalcula su propia fila de auditoría y
+hereda las otras cinco de la ejecución anterior. El notebook 03 es el único
+sitio donde los seis generadores se ajustan en una misma corrida, así que es el
+que hace comparables entre sí las cifras de la sección «Fidelidad». Sin él, un
+clon limpio termina con una auditoría mezclada de dos ejecuciones y no
+reproduce lo publicado.
+
+El notebook reajusta los seis generadores, pero reutiliza el TSTR cacheado
+mientras el manifiesto del paso 1 siga siendo válido: no repite los 21
+entrenamientos downstream. El paso deja además `reports/diffusion_ts_r61/nb03/`
+en espejo con `data/processed/`, que es la invariante que protege
+`tests/test_artefactos_r61.py`.
 
 - `data/processed/tstr_nb03_manifest.json`: receta y checkpoint del TSTR oficial.
 - `data/processed/malla_*_delta_pareado.csv`: inferencia por semilla de ambas mallas.

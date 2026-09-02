@@ -53,6 +53,7 @@ taller_b5t1/
 ├── tests/
 │   ├── test_netviz.py         # pruebas de los diagramas (no requieren LaTeX)
 │   ├── test_diffusion_ts.py   # contrato R61, reproducibilidad y save/load
+│   ├── test_artefactos_r61.py # coherencia de los CSV canónicos y su espejo en el informe
 │   └── test_gen_audit.py      # pruebas de las métricas de fidelidad (sin GPU, segundos)
 ├── scripts/
 │   ├── run_all.py             # ejecuta todos los notebooks de principio a fin
@@ -60,6 +61,7 @@ taller_b5t1/
 │   ├── run_diffusion_ts_r61_nb03.py    # TSTR oficial alineado
 │   ├── promote_diffusion_ts_r61_results.py # valida y promueve resultados canónicos
 │   ├── update_diffusion_ts_r61_notebooks.py # sincroniza narrativa 03/04
+│   ├── run_diffusion_ts_r61_notebook03.py # regenera la auditoría canónica (paso 5)
 │   └── make_arch_figures.py   # regenera los diagramas de arquitectura
 ├── pyproject.toml             # entorno uv (torch desde el índice cu128)
 ├── requirements.txt           # ruta pip, para quien no use uv y para Colab

@@ -4,6 +4,12 @@ Los cinco brazos que no han cambiado y TRTR se conservan de la ejecución
 histórica. Solo se calculan las tres filas de Diffusion-TS con el mismo ajuste
 generativo seed 42 y las mismas semillas downstream 42/43/44. El resultado
 activo vuelve a contener exactamente 21 filas.
+
+La auditoría que escribe aquí es PARCIAL por el mismo motivo: solo la fila de
+Diffusion-TS es nueva, las otras cinco se heredan. La tabla de fidelidad que
+publica el informe la regenera el notebook 03, que ajusta los seis generadores
+en una misma corrida — es el paso 5 de la reproducción
+(`scripts/run_diffusion_ts_r61_notebook03.py`).
 """
 
 from __future__ import annotations
