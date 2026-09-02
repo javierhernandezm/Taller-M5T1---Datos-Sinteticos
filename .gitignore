@@ -37,3 +37,6 @@ reports/diffusion_ts_experiment/
 # métricas y el informe sí se versionan; checkpoints y matrices sintéticas, no.
 reports/diffusion_ts_r61/**/checkpoints/
 reports/diffusion_ts_r61/**/synthetic/
+
+# Site de apuntes NB03: artefacto local/publicado en Sites, no se versiona ni se sube a GitHub.
+reports/nb03-modelos-generativos/
