@@ -1,7 +1,0 @@
-{
-  "n_train_windows": 102406,
-  "n_paths": 101151,
-  "coverage": 0.9877448586996855,
-  "rejected_overlap": 0,
-  "target_max_abs_error": 4.76837158203125e-07
-}
