@@ -40,7 +40,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import torch
-import torch.nn as nn
+from torch import nn
 
 
 def get_device() -> torch.device:

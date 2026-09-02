@@ -215,7 +215,7 @@ def resolver_presupuesto(
         n_synth = int(n_synth)
         return n_synth / n_real, n_synth
     if ratio is not None:
-        return float(ratio), int(round(ratio * n_real))
+        return float(ratio), round(ratio * n_real)
     raise ValueError("Hay que dar 'ratio' o 'n_synth' (uno de los dos, no ninguno).")
 
 
@@ -326,7 +326,7 @@ def plan_de_malla(n_reales, generadores, ratios, seeds) -> list[dict]:
                             "n_real": n,
                             "generador": g,
                             "ratio": float(r),
-                            "n_synth": int(round(r * n)),
+                            "n_synth": round(r * n),
                             "seed": s,
                         }
                     )

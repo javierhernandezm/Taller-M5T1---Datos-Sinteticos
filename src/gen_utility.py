@@ -75,7 +75,7 @@ def entrenar_y_evaluar(X_tr: np.ndarray, y_tr: np.ndarray,
     """
     rng = np.random.default_rng(seed)
     perm = rng.permutation(len(X_tr))
-    n_val = max(1, int(round(val_frac * len(X_tr))))
+    n_val = max(1, round(val_frac * len(X_tr)))
     i_val, i_tr = perm[:n_val], perm[n_val:]
 
     kw = dict(ref["train_kwargs"])

@@ -39,7 +39,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 import torch
-import torch.nn as nn
+from torch import nn
 
 from .diffusion_ts import DiffusionTSR61Generator
 from .training import get_device
@@ -55,7 +55,7 @@ class BaseGenerator(ABC):
     name: str = "base"
 
     @abstractmethod
-    def fit(self, XY: np.ndarray) -> "BaseGenerator": ...
+    def fit(self, XY: np.ndarray) -> BaseGenerator: ...
 
     @abstractmethod
     def sample(self, n: int, seed: int = 0) -> np.ndarray: ...
@@ -92,7 +92,7 @@ class JitterGenerator(BaseGenerator):
         self.noise = noise
         self.history_ = {}
 
-    def fit(self, XY: np.ndarray) -> "JitterGenerator":
+    def fit(self, XY: np.ndarray) -> JitterGenerator:
         self.XY_ = XY.astype(np.float32)
         self.sd_ = XY.std(axis=0).astype(np.float32)
         return self
@@ -128,7 +128,7 @@ class GaussianGenerator(BaseGenerator):
         self.shrinkage = shrinkage
         self.history_ = {}
 
-    def fit(self, XY: np.ndarray) -> "GaussianGenerator":
+    def fit(self, XY: np.ndarray) -> GaussianGenerator:
         X = XY.astype(np.float64)
         self.mu_ = X.mean(axis=0)
         cov = np.cov(X, rowvar=False)
@@ -168,7 +168,7 @@ class BlockBootstrapGenerator(BaseGenerator):
         self.mean_block = mean_block
         self.history_ = {}
 
-    def fit(self, XY: np.ndarray) -> "BlockBootstrapGenerator":
+    def fit(self, XY: np.ndarray) -> BlockBootstrapGenerator:
         self.X_ = XY[:, :-1].astype(np.float32)
         self.y_ = XY[:, -1].astype(np.float32)
         self.win_ = self.X_.shape[1]
@@ -276,20 +276,20 @@ class VAEGenerator(BaseGenerator):
         lr: float = 1e-3,
         observation_noise: bool = True,
     ) -> None:
-        self.cfg = dict(
-            latent=latent,
-            hidden=hidden,
-            beta=beta,
-            epochs=epochs,
-            batch_size=batch_size,
-            lr=lr,
-            observation_noise=observation_noise,
-        )
+        self.cfg = {
+            "latent": latent,
+            "hidden": hidden,
+            "beta": beta,
+            "epochs": epochs,
+            "batch_size": batch_size,
+            "lr": lr,
+            "observation_noise": observation_noise,
+        }
         self.history_ = {}
 
     def fit(
         self, XY: np.ndarray, seed: int = 0, verbose: bool = False
-    ) -> "VAEGenerator":
+    ) -> VAEGenerator:
         c = self.cfg
         dev = get_device()
         torch.manual_seed(seed)
@@ -317,8 +317,8 @@ class VAEGenerator(BaseGenerator):
                 tot["recon"] += float(recon.detach())
                 tot["kl"] += float(kl.detach())
                 nb += 1
-            for k in tot:
-                self.history_[k].append(tot[k] / nb)
+            for k, v in tot.items():
+                self.history_[k].append(v / nb)
             if verbose and ep % 10 == 0:
                 print(f"  VAE ep{ep:3d} loss {self.history_['loss'][-1]:.3f}")
 
@@ -372,15 +372,15 @@ class WGANGPGenerator(BaseGenerator):
         n_critic: int = 5,
         gp_weight: float = 10.0,
     ) -> None:
-        self.cfg = dict(
-            latent=latent,
-            hidden=hidden,
-            epochs=epochs,
-            batch_size=batch_size,
-            lr=lr,
-            n_critic=n_critic,
-            gp_weight=gp_weight,
-        )
+        self.cfg = {
+            "latent": latent,
+            "hidden": hidden,
+            "epochs": epochs,
+            "batch_size": batch_size,
+            "lr": lr,
+            "n_critic": n_critic,
+            "gp_weight": gp_weight,
+        }
         self.history_ = {}
 
     def _gradient_penalty(self, critic, real, fake, dev):
@@ -394,7 +394,7 @@ class WGANGPGenerator(BaseGenerator):
 
     def fit(
         self, XY: np.ndarray, seed: int = 0, verbose: bool = False
-    ) -> "WGANGPGenerator":
+    ) -> WGANGPGenerator:
         c = self.cfg
         dev = get_device()
         torch.manual_seed(seed)
@@ -433,8 +433,8 @@ class WGANGPGenerator(BaseGenerator):
                 acc["wasserstein"] += float(w_est.detach())
                 acc["critic"] += float(loss_c.detach())
                 nb += 1
-            for k in acc:
-                self.history_[k].append(acc[k] / max(nb, 1))
+            for k, v in acc.items():
+                self.history_[k].append(v / max(nb, 1))
             if verbose and ep % 10 == 0:
                 print(f"  WGAN ep{ep:3d} W~{self.history_['wasserstein'][-1]:.3f}")
         return self
@@ -503,13 +503,13 @@ class RealNVPGenerator(BaseGenerator):
         batch_size: int = 512,
         lr: float = 1e-3,
     ) -> None:
-        self.cfg = dict(
-            n_layers=n_layers,
-            hidden=hidden,
-            epochs=epochs,
-            batch_size=batch_size,
-            lr=lr,
-        )
+        self.cfg = {
+            "n_layers": n_layers,
+            "hidden": hidden,
+            "epochs": epochs,
+            "batch_size": batch_size,
+            "lr": lr,
+        }
         self.history_ = {}
 
     def _build(self, d: int, dev):
@@ -532,7 +532,7 @@ class RealNVPGenerator(BaseGenerator):
 
     def fit(
         self, XY: np.ndarray, seed: int = 0, verbose: bool = False
-    ) -> "RealNVPGenerator":
+    ) -> RealNVPGenerator:
         c = self.cfg
         dev = get_device()
         torch.manual_seed(seed)
