@@ -61,7 +61,7 @@ class HarOLS:
         cols = [np.ones(len(X_raw))] + [_ln_rv(X_raw, k) for k in cls.HORIZONS]
         return np.column_stack(cols)
 
-    def fit(self, X_raw: np.ndarray, y: np.ndarray) -> "HarOLS":
+    def fit(self, X_raw: np.ndarray, y: np.ndarray) -> HarOLS:
         F = self._features(X_raw)
         self.coef_, *_ = np.linalg.lstsq(F, y.astype(np.float64), rcond=None)
         return self

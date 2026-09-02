@@ -50,7 +50,6 @@ import pandas as pd
 
 from .config import Config
 
-
 # ---------------------------------------------------------------------------
 # 1. Retornos
 # ---------------------------------------------------------------------------
@@ -231,7 +230,7 @@ class Standardizer:
     y_mu: float = 0.0
     y_sd: float = 1.0
 
-    def fit(self, X_train: np.ndarray, y_train: np.ndarray) -> "Standardizer":
+    def fit(self, X_train: np.ndarray, y_train: np.ndarray) -> Standardizer:
         self.x_mu = float(X_train.mean())
         self.x_sd = float(X_train.std())
         self.y_mu = float(y_train.mean())
