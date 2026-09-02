@@ -1,4 +1,4 @@
-"""Pruebas rápidas del prototipo Diffusion-TS; no usan los datos del proyecto."""
+"""Pruebas rápidas de Diffusion-TS R81/R61; no usan los datos del proyecto."""
 
 from __future__ import annotations
 
@@ -14,7 +14,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 import src.diffusion_ts as diffusion_module
-from src.diffusion_ts import DiffusionTSGenerator, paths_to_xy, reconstruct_return_paths
+from src.diffusion_ts import (
+    DiffusionTSGenerator,
+    DiffusionTSR61Generator,
+    paths_to_xy,
+    reconstruct_return_paths,
+)
 
 
 def test_reconstruccion_usa_solo_continuidad_demostrada():
@@ -110,3 +115,57 @@ def test_modelo_minimo_entrena_muestrea_y_es_reproducible(monkeypatch):
     assert np.isfinite(a).all()
     np.testing.assert_array_equal(a, b)
     assert len(gen.history_["loss"]) == 2
+
+
+def test_r61_respeta_el_contrato_comun_y_el_target_es_token_especial(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(diffusion_module, "get_device", lambda: torch.device("cpu"))
+    XY = np.random.default_rng(17).normal(size=(32, 9)).astype(np.float32)
+    gen = DiffusionTSR61Generator(
+        window_len=8,
+        diffusion_steps=8,
+        sample_steps=3,
+        train_steps=2,
+        batch_size=8,
+        d_model=16,
+        n_heads=4,
+        n_layers=1,
+        ff_mult=2,
+        dropout=0.0,
+        seasonal_k=2,
+        warmup_steps=1,
+    ).fit(XY, seed=13)
+
+    synth = gen.sample(7, seed=101)
+    assert gen.name == "diffusion_ts"
+    assert gen.seq_len == 9
+    assert synth.shape == (7, 9)
+    assert np.isfinite(synth).all()
+    np.testing.assert_array_equal(synth, gen.sample(7, seed=101))
+    assert gen.sample(0, seed=101).shape == (0, 9)
+    assert gen.model_.return_projection is not gen.model_.target_projection
+
+    checkpoint = tmp_path / "r61.pt"
+    gen.save(checkpoint)
+    restored = DiffusionTSR61Generator.load(checkpoint, device=torch.device("cpu"))
+    np.testing.assert_array_equal(synth, restored.sample(7, seed=101))
+
+    with pytest.raises(ValueError, match=r"\[X60 \| y\]"):
+        gen.fit(np.zeros((5, 12), dtype=np.float32))
+    with pytest.raises(ValueError, match="inválidos"):
+        invalid = XY.copy()
+        invalid[0, -1] = np.nan
+        gen.fit(invalid)
+
+
+def test_factory_de_malla_usa_r61_y_la_configuracion_oficial():
+    from src.malla import GENERADORES_ACTIVOS, construir_generador
+
+    gen = construir_generador("diffusion_ts")
+    assert isinstance(gen, DiffusionTSR61Generator)
+    assert gen.cfg["window_len"] == 60
+    assert gen.cfg["train_steps"] == 3_000
+    assert gen.cfg["sample_steps"] == 50
+    assert "diffusion_ts" in GENERADORES_ACTIVOS
+    assert "wgan_gp" not in GENERADORES_ACTIVOS

@@ -16,10 +16,10 @@ Uso
 
 Notas
 -----
-* Requiere una distribución LaTeX con `pdflatex` (MiKTeX en Windows, TeX Live
-  en Linux/macOS) y `pdftoppm` para el PNG. Es una dependencia OPCIONAL del
-  repo: sin ella este script avisa y sale con 0, porque los .png y .tex van
-  versionados y siguen siendo válidos.
+* LaTeX con `pdflatex` (MiKTeX en Windows, TeX Live en Linux/macOS) y
+  `pdftoppm` producen la versión vectorial. Son dependencias OPCIONALES: sin
+  ellas se reutilizan los PNG versionados y, para una figura nueva sin caché,
+  `netviz.render` genera un PNG 2-D equivalente con Matplotlib.
 * El `.tex` de cada figura es la clave de caché: si el generado coincide con el
   versionado y el PNG existe, no se recompila nada. `--force` salta el caché.
 * Los .tex y .pdf intermedios quedan en reports/figures/tex/.
@@ -41,10 +41,14 @@ from src.netviz import diagramas_taller, render
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[1])
-    ap.add_argument("prefijos", nargs="*",
-                    help="prefijos numéricos de figura (p. ej. 19 23); vacío = todas")
-    ap.add_argument("--force", action="store_true",
-                    help="recompila aunque el .tex no haya cambiado")
+    ap.add_argument(
+        "prefijos",
+        nargs="*",
+        help="prefijos numéricos de figura (p. ej. 19 23); vacío = todas",
+    )
+    ap.add_argument(
+        "--force", action="store_true", help="recompila aunque el .tex no haya cambiado"
+    )
     ap.add_argument("--list", action="store_true", help="lista las figuras y sale")
     ap.add_argument("--dpi", type=int, default=300, help="resolución del PNG (300)")
     args = ap.parse_args()
@@ -60,25 +64,33 @@ def main() -> int:
 
     objetivo = [d for d in todos if not args.prefijos or d.nombre[:2] in args.prefijos]
     if not objetivo:
-        print(f"Ninguna figura coincide con {args.prefijos}. Disponibles: "
-              f"{[d.nombre[:2] for d in todos]}")
+        print(
+            f"Ninguna figura coincide con {args.prefijos}. Disponibles: "
+            f"{[d.nombre[:2] for d in todos]}"
+        )
         return 1
 
     if shutil.which("pdflatex") is None:
-        print("AVISO: no hay pdflatex en el PATH. Las figuras versionadas en "
-              f"{cfg.fig_dir} siguen siendo válidas; para regenerarlas instala "
-              "MiKTeX (Windows) o TeX Live (Linux/macOS).")
+        print(
+            "AVISO: no hay pdflatex en el PATH. Se reutilizarán los PNG "
+            "versionados y las figuras nuevas usarán el fallback Matplotlib; "
+            "instala MiKTeX/TeX Live para obtener también PDF vectorial."
+        )
 
     print(f"Generando {len(objetivo)} diagrama(s) en {cfg.fig_dir}")
     fallos = 0
     for d in objetivo:
         try:
             render(d, fig_dir=cfg.fig_dir, force=args.force, dpi=args.dpi)
-        except Exception as e:      # noqa: BLE001 - se informa y se sigue
+        except Exception as e:  # noqa: BLE001 - se informa y se sigue
             fallos += 1
             print(f"  X {d.nombre}: {e}")
 
-    print("\nTerminado." if not fallos else f"\nTerminado con {fallos} figura(s) en error.")
+    print(
+        "\nTerminado."
+        if not fallos
+        else f"\nTerminado con {fallos} figura(s) en error."
+    )
     return 1 if fallos else 0
 
 

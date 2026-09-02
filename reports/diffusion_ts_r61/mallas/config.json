@@ -1,0 +1,11 @@
+{
+  "representation": "R61 = [X60 | y]",
+  "generator": "diffusion_ts",
+  "train_steps": 3000,
+  "sample_steps": 50,
+  "recipe": "f16761a9",
+  "fit_keys": 15,
+  "downstream_cells": 117,
+  "reuse_is_exact": true,
+  "experiment_id": "d3d6cb8bb7"
+}

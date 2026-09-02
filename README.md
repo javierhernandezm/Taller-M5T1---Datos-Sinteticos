@@ -28,7 +28,8 @@ taller_b5t1/
 │   ├── baselines.py           #   predictores clásicos (media, persistencia, HAR-RV) y métricas
 │   ├── models.py              #   arquitecturas candidatas del modelo downstream
 │   ├── training.py            #   harness único de entrenamiento (clipping, cosine, best-state)
-│   ├── generators.py          #   los 6 generadores (3 baselines + VAE, WGAN-GP, RealNVP)
+│   ├── generators.py          #   baselines + VAE/RealNVP; WGAN legado reproducible
+│   ├── diffusion_ts.py        #   Diffusion-TS R61 activo + prototipo R81 exploratorio
 │   ├── gen_audit.py           #   auditoría de FIDELIDAD (hechos estilizados, KS/W1, corr)
 │   ├── gen_utility.py         #   auditoría de UTILIDAD (TSTR frente a TRTR)
 │   ├── malla.py               #   barrido real×sintético, reanudable con checkpoint
@@ -51,9 +52,14 @@ taller_b5t1/
 ├── vendor/PlotNeuralNet/      # PlotNeuralNet (MIT), vendorizado: no está en PyPI
 ├── tests/
 │   ├── test_netviz.py         # pruebas de los diagramas (no requieren LaTeX)
+│   ├── test_diffusion_ts.py   # contrato R61, reproducibilidad y save/load
 │   └── test_gen_audit.py      # pruebas de las métricas de fidelidad (sin GPU, segundos)
 ├── scripts/
 │   ├── run_all.py             # ejecuta todos los notebooks de principio a fin
+│   ├── run_diffusion_ts_r61_mallas.py  # mallas R61 reanudables
+│   ├── run_diffusion_ts_r61_nb03.py    # TSTR oficial alineado
+│   ├── promote_diffusion_ts_r61_results.py # valida y promueve resultados canónicos
+│   ├── update_diffusion_ts_r61_notebooks.py # sincroniza narrativa 03/04
 │   └── make_arch_figures.py   # regenera los diagramas de arquitectura
 ├── pyproject.toml             # entorno uv (torch desde el índice cu128)
 ├── requirements.txt           # ruta pip, para quien no use uv y para Colab
@@ -260,79 +266,58 @@ sola talla confunde "esta familia es mejor" con "esta red tenía el tamaño adec
 > dentro de la familia no compra nada medible**: lo que decide es el sesgo inductivo
 > recurrente, no el tamaño.
 
-**Auditoría de generadores** (notebook 03; referencia real: curtosis 25,2 · ACF|r| 0,062).
-Dos ejes: **fidelidad** (¿se parecen?) y **utilidad** (¿sirven para entrenar?). El ratio
-TSTR/TRTR es el R² de un modelo entrenado **solo con sintético** dividido por el del mismo
-modelo entrenado con las 92k ventanas reales de train; 1,0 sería conservar toda la
-información. Los dos brazos reciben el MISMO presupuesto de ventanas: sin esa simetría el
-ratio no significa nada.
+**Auditoría de generadores R61** (notebook 03; referencia real: curtosis 25,24 ·
+ACF|r| 0,062). La comparación activa es `[X60 | y]` para todos: Diffusion-TS usa 60 tokens
+temporales y un token especial para `y`. El prototipo R81 se conserva como exploración,
+pero queda excluido porque habría recibido 20 retornos que ningún rival ve.
 
-| Generador | Curtosis | ACF\|r\| lag1 | AUC discrim. | W1 por columna | ratio TSTR/TRTR |
+| Generador | sd(X) | Curtosis | ACF\|r\| lag1 | AUC | ratio TSTR/TRTR |
 |---|---:|---:|---:|---:|---:|
-| jitter | 23,6 | 0,058 | 0,50 | 0,026 | 0,92 |
-| gaussiana | 0,03 | −0,015 | 0,96 | 0,236 | **−0,39** |
-| block_bootstrap | 26,2 | 0,125 | 0,76 | 0,057 | 0,62 |
-| VAE | 1,43 | −0,006 | 0,89 | 0,158 | 0,66 |
-| WGAN-GP | 4,43 | −0,013 | 0,83 | 0,095 | 0,25 |
-| **RealNVP** | **23,2** | **0,042** | **0,65** | **0,057** | **0,95** |
+| jitter | 1,000 | 23,57 | **0,058** | **0,507** | 0,9233 |
+| gaussiana | 1,001 | 0,03 | −0,015 | 0,958 | **−0,3876** |
+| block bootstrap | 0,990 | 26,16 | 0,125 | 0,760 | 0,6237 |
+| VAE | 0,909 | 1,50 | −0,005 | 0,900 | 0,6633 |
+| **Diffusion-TS R61** | **0,693** | 20,32 | −0,013 | 0,784 | **0,9472** |
+| RealNVP | 0,940 | 22,48 | **0,042** | **0,662** | **0,9467** |
 
-> **La gaussiana tiene utilidad negativa:** un modelo entrenado con sus muestras es *peor
-> que predecir la media constante*. La fidelidad no es un lujo estético — un generador que
-> no reproduce las colas no es neutro, es tóxico.
+> Diffusion-TS encabeza el TSTR activo con R² 0,4773, pero aventaja a RealNVP solo en
+> **0,00025 R²**: es un empate práctico. Su fidelidad es peor —contrae la escala un 31 % y
+> no reproduce el clustering—, de modo que no basta con mirar TSTR para declararlo ganador.
 >
-> El orden de la columna TSTR reproduce **casi exactamente** el del AUC discriminativo, que
-> se mide sin entrenar un solo modelo downstream: se puede elegir generador en minutos, en
-> lugar de barrer una malla entera.
->
-> **RealNVP conserva el 95 % de la utilidad y es el único que bate al jitter.** Que el
-> listón sea el jitter —ruido sobre el dato real, quince líneas de código— sigue siendo el
-> dato incómodo de la tabla: las otras dos redes generativas, VAE y WGAN-GP, quedan muy por
-> detrás de él pese a ser mucho más caras.
->
-> **Nota de vigencia.** Estos números son con la campeona `gru_l` a 100 épocas. Con la
-> anterior (`cnn_l` a 40) el WGAN-GP salía con utilidad **negativa** (−0,21) y aquí sale en
-> +0,25; y el orden entre RealNVP y jitter también depende del downstream. El brazo TSTR
-> mide "cuánto sabe enseñar el generador *a este modelo*", no una propiedad del generador
-> en abstracto — y es la razón de que el TSTR se recalcule entero cuando cambia la
-> arquitectura congelada, en vez de reanudarse desde el CSV.
+> Frente al WGAN-GP retirado (R² TSTR histórico 0,1250), Diffusion mejora **+0,3523 R²** y
+> gana en las tres semillas. Esta es la evidencia que justifica la sustitución.
 
-**Malla real×sintético** (notebook 04; 333 celdas de ratios + 465 de curvas, Δ R² pareado
-por semilla):
+**Malla real×sintético** (notebook 04; 333 celdas de ratios + 465 de curvas, ΔR² pareado
+por semilla). La malla de ratios activa queda:
 
-| N_real | R² solo real | sd entre semillas | mejoras | empeoras | no concluyentes |
+| N_real | R² solo real | sd | mejoras | empeoras | no concluyentes |
 |---:|---:|---:|---:|---:|---:|
-| 250 | 0,151 | **0,115** | 1 | 3 | 32 |
+| 250 | 0,151 | **0,115** | 2 | 3 | 31 |
 | 1.000 | 0,199 | **0,161** | 0 | 0 | 36 |
-| 3.000 | 0,338 | 0,022 | **13** | 5 | 18 |
+| 3.000 | 0,338 | 0,022 | **19** | 4 | 13 |
 
-> **Existe un suelo mínimo de datos reales por debajo del cual generar datos no sirve de
-> nada.** Con 250 y 1.000 ventanas la dispersión entre semillas del propio modelo sin
-> sintéticos (0,12–0,16 de R²) es mayor que cualquier efecto buscado: 68 de 72 celdas salen
-> no concluyentes. El beneficio aparece con 3.000 y lo firman `realnvp` (+0,081 con ratio
-> 5×, t=10,6) y `jitter`. Ese umbral **depende del modelo downstream** —con la campeona
-> `cnn_l` anterior caía entre 250 y 1.000— y no es una constante del problema.
+Para Diffusion-TS, los ratios dan **7 mejoras, 0 empeoramientos y 11 resultados no
+concluyentes**. Con N=3.000 mejoran las seis dosis, desde +0,0136 R² con 0,25× hasta
++0,0629 con 5×. Con N=1.000 todas las medias son positivas, pero tres semillas no bastan
+para separarlas de la inestabilidad del downstream. Con N=250 solo concluye 5× (+0,0765).
 
-> **No hay óptimo intermedio de proporción, tampoco por abajo.** Los ratios fraccionarios
-> (0,25× · 0,5× · 0,75×) se añadieron para cubrir el tramo que `[0, 1, 3]` se saltaba
-> entero. Con N=3.000 el efecto ya es significativo en **0,25×** (`jitter` +0,020, t=5,4) y
-> crece de forma monótona hasta 5×: una dosis pequeña ya ayuda, y más ayuda más. Lo que
-> cambia con el ratio no es el óptimo sino el **signo**, y lo fija la fidelidad del
-> generador: la `gaussiana` empeora *más* cuanto más sintético se añade (−0,180 con 5×), que
-> es la firma de un sesgo y no de ruido.
+En la malla de presupuestos absolutos, Diffusion obtiene **9 mejoras, 1 empeoramiento y 15
+no concluyentes** sobre el test. Empata globalmente con RealNVP (+0,0003 R² medio) y jitter
+(−0,0009), y supera al WGAN histórico en +0,1276 R² medio, ganando 69 de 75 pares. A
+partir de 10.000–20.000 reales, el beneficio práctico se reduce a milésimas.
 
-**La auditoría del notebook 03 predice el resultado de la malla** sin mirar el modelo
-downstream: la correlación de rangos entre `err_corr(X,X)` en rangos y la ganancia pareada
-es −0,89, estable en los tres regímenes, y el ratio TSTR/TRTR llega a +0,89 en N=3.000. Se
-puede elegir generador en minutos en lugar de barrer 333 celdas. Con la cautela de que son
-correlaciones sobre **n = 6** generadores: la señal está en que el orden se repite en los
-tres regímenes, no en el valor puntual.
+**Conclusión:** sí, Diffusion-TS R61 merece sustituir a WGAN-GP en el pipeline activo. No
+es un campeón absoluto: RealNVP conserva mejor la distribución y el jitter es más barato;
+los tres empatan en la malla larga. El caso de uso más claro de Diffusion es alrededor de
+3.000 ventanas reales, con presupuestos sintéticos de 1× a 6,7×.
 
 ---
 
-El flow es el mejor generador neuronal en los tres ejes, pero **sobreajusta**: su ventaja
-en log-verosimilitud sobre una N(0, I) trivial cae de **+24,0 nats en train** a **+4,3 en
-validación**, un 82 % menos. Sigue batiendo al listón fuera de muestra, pero por mucho
-menos de lo que su ajuste sugiere. Parecerse a train no garantiza generalizar.
+RealNVP sigue siendo el generador neuronal de **mejor fidelidad**, aunque **sobreajusta**:
+su ventaja en log-verosimilitud sobre una N(0, I) trivial cae de **+24,0 nats en train** a
+**+4,3 en validación**, un 82 % menos. Diffusion-TS enseña mejor a la GRU en TSTR pese a
+ser más fácil de distinguir; parecerse a train y conservar la señal downstream son ejes
+relacionados, no equivalentes.
 
 ## Estado
 

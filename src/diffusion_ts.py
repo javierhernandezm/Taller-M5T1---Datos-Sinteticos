@@ -1,15 +1,16 @@
 """Diffusion-TS adaptado al experimento de volatilidad del taller.
 
-Este módulo vive deliberadamente fuera de ``generators.py`` mientras el modelo
-está en fase de investigación. El contrato actual recibe ``[X | y]`` aplanado,
-pero una difusión temporal necesita observar retornos ordenados. Aquí se
-reconstruye la trayectoria conjunta de 81 sesiones::
+La implementación activa, :class:`DiffusionTSR61Generator`, recibe exactamente
+el contrato común estandarizado ``[X60 | y]``. Los retornos son tokens
+temporales y el target es un token especial con proyección y cabeza propias;
+participa en la atención conjunta, pero no se interpreta como un retorno. Así
+la comparación con VAE, WGAN-GP y RealNVP mantiene idéntica información.
 
-    [60 retornos de X | 21 retornos que determinan y]
-
-El generador aprende esa trayectoria completa y, al muestrear, calcula
-``y = log(sqrt(252 * mean(r_futuro**2)))``. Por tanto la etiqueta sintética no
-la inventa un segundo modelo y es exactamente coherente con los retornos.
+El módulo conserva también el prototipo exploratorio
+:class:`DiffusionTSGenerator`, que reconstruye trayectorias R81 y deriva el
+target de sus 21 retornos futuros. Sirve para reproducir la investigación
+inicial, pero no entra en las tablas definitivas porque tiene una ventaja de
+representación frente a los generadores R61.
 
 La red conserva los elementos centrales de Diffusion-TS: predicción directa
 de x0, Transformer bidireccional, tendencia polinómica, componente Fourier,
@@ -243,6 +244,104 @@ class _DiffusionTSDenoiser(nn.Module):
         seasonal = self._seasonality(self.seasonal_head(h).squeeze(-1))
         residual = self.residual_head(h).squeeze(-1)
         return trend + seasonal + residual
+
+
+class _DiffusionTSJointDenoiser(nn.Module):
+    """Denoiser para el contrato R61: 60 retornos y un token objetivo especial.
+
+    El target no ocupa una posición temporal ficticia. Tiene proyección, tipo y
+    cabeza propios, pero participa en la atención bidireccional para que la red
+    aprenda la distribución conjunta ``p(X, y)`` igual que VAE, WGAN-GP y
+    RealNVP. La descomposición tendencia/Fourier se aplica exclusivamente a los
+    60 retornos, donde sí tiene significado temporal.
+    """
+
+    def __init__(
+        self,
+        window_len: int,
+        *,
+        d_model: int,
+        n_heads: int,
+        n_layers: int,
+        ff_mult: int,
+        dropout: float,
+        trend_degree: int,
+        seasonal_k: int,
+    ) -> None:
+        super().__init__()
+        if d_model % n_heads:
+            raise ValueError("d_model debe ser divisible por n_heads")
+        self.window_len = window_len
+        self.seasonal_k = seasonal_k
+        self.return_projection = nn.Linear(1, d_model)
+        self.target_projection = nn.Linear(1, d_model)
+        self.token_type = nn.Embedding(2, d_model)
+        self.register_buffer(
+            "position", _positional_encoding(window_len + 1, d_model), persistent=False
+        )
+        self.time_mlp = nn.Sequential(
+            nn.Linear(d_model, d_model * 2), nn.SiLU(), nn.Linear(d_model * 2, d_model)
+        )
+        layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=n_heads,
+            dim_feedforward=d_model * ff_mult,
+            dropout=dropout,
+            activation="gelu",
+            batch_first=True,
+            norm_first=True,
+        )
+        self.encoder = nn.TransformerEncoder(
+            layer, num_layers=n_layers, enable_nested_tensor=False
+        )
+        self.norm = nn.LayerNorm(d_model)
+        self.trend_head = nn.Linear(d_model, trend_degree + 1)
+        self.seasonal_head = nn.Linear(d_model, 1)
+        self.residual_head = nn.Sequential(
+            nn.Linear(d_model, d_model), nn.SiLU(), nn.Linear(d_model, 1)
+        )
+        self.target_head = nn.Sequential(
+            nn.Linear(d_model * 2, d_model), nn.SiLU(), nn.Linear(d_model, 1)
+        )
+        grid = torch.linspace(-1.0, 1.0, window_len)
+        powers = torch.stack([grid**p for p in range(trend_degree + 1)], dim=0)
+        self.register_buffer("trend_basis", powers, persistent=False)
+
+    def _seasonality(self, raw: torch.Tensor) -> torch.Tensor:
+        spectrum = torch.fft.rfft(raw.float(), dim=1, norm="ortho")
+        if spectrum.shape[1] <= 1 or self.seasonal_k <= 0:
+            return torch.zeros_like(raw, dtype=torch.float32)
+        amplitude = spectrum.abs()
+        amplitude[:, 0] = -torch.inf
+        k = min(self.seasonal_k, spectrum.shape[1] - 1)
+        keep = amplitude.topk(k, dim=1).indices
+        filtered = torch.zeros_like(spectrum)
+        filtered.scatter_(1, keep, spectrum.gather(1, keep))
+        return torch.fft.irfft(filtered, n=self.window_len, dim=1, norm="ortho")
+
+    def forward(self, xy_t: torch.Tensor, timestep: torch.Tensor) -> torch.Tensor:
+        returns = self.return_projection(xy_t[:, : self.window_len].unsqueeze(-1))
+        target = self.target_projection(xy_t[:, self.window_len :].unsqueeze(-1))
+        tokens = torch.cat([returns, target], dim=1)
+        types = torch.cat(
+            [
+                torch.zeros(self.window_len, dtype=torch.long, device=xy_t.device),
+                torch.ones(1, dtype=torch.long, device=xy_t.device),
+            ]
+        )
+        time = self.time_mlp(_sinusoidal_embedding(timestep, tokens.shape[-1]))
+        hidden = tokens + self.position + self.token_type(types)[None] + time[:, None]
+        hidden = self.norm(self.encoder(hidden))
+
+        return_hidden = hidden[:, : self.window_len]
+        target_hidden = hidden[:, self.window_len]
+        coefficients = self.trend_head(return_hidden.mean(dim=1))
+        trend = coefficients @ self.trend_basis
+        seasonal = self._seasonality(self.seasonal_head(return_hidden).squeeze(-1))
+        residual = self.residual_head(return_hidden).squeeze(-1)
+        pooled = return_hidden.mean(dim=1)
+        predicted_target = self.target_head(torch.cat([target_hidden, pooled], dim=1))
+        return torch.cat([trend + seasonal + residual, predicted_target], dim=1)
 
 
 class DiffusionTSGenerator:
@@ -537,3 +636,78 @@ class DiffusionTSGenerator:
         obj.fit_seed_ = int(payload.get("fit_seed", -1))
         obj.n_fit_ = int(payload.get("n_fit", 0))
         return obj
+
+
+class DiffusionTSR61Generator(DiffusionTSGenerator):
+    """Diffusion-TS con el mismo contrato R61 que los generadores existentes.
+
+    La entrada y la salida son matrices estandarizadas ``[X60 | y]``. Los 60
+    retornos forman la secuencia temporal y ``y`` es un token especial que
+    participa en la atención, no el retorno número 61. Esto mantiene la
+    comparación de información exactamente alineada con VAE, WGAN-GP y
+    RealNVP, a diferencia del prototipo exploratorio de trayectorias R81.
+    """
+
+    name = "diffusion_ts"
+
+    @property
+    def seq_len(self) -> int:
+        return int(self.cfg["window_len"] + 1)
+
+    def _build(self, device: torch.device) -> None:
+        c = self.cfg
+        self.model_ = _DiffusionTSJointDenoiser(
+            c["window_len"],
+            d_model=c["d_model"],
+            n_heads=c["n_heads"],
+            n_layers=c["n_layers"],
+            ff_mult=c["ff_mult"],
+            dropout=c["dropout"],
+            trend_degree=c["trend_degree"],
+            seasonal_k=c["seasonal_k"],
+        ).to(device)
+        self.ema_model_ = copy.deepcopy(self.model_).eval().requires_grad_(False)
+        betas = _cosine_beta_schedule(c["diffusion_steps"]).to(device)
+        alphas = 1.0 - betas
+        self.alpha_bar_ = torch.cumprod(alphas, dim=0)
+        self.device_ = device
+
+    def _loss(
+        self, clean: torch.Tensor, timestep: torch.Tensor
+    ) -> tuple[torch.Tensor, ...]:
+        alpha = self.alpha_bar_[timestep][:, None]
+        noise = torch.randn_like(clean)
+        noisy = alpha.sqrt() * clean + (1.0 - alpha).sqrt() * noise
+        predicted = self.model_(noisy, timestep)
+        temporal = F.l1_loss(predicted, clean)
+        window_len = self.cfg["window_len"]
+        pred_fft = torch.view_as_real(
+            torch.fft.rfft(predicted[:, :window_len].float(), dim=1, norm="ortho")
+        )
+        real_fft = torch.view_as_real(
+            torch.fft.rfft(clean[:, :window_len].float(), dim=1, norm="ortho")
+        )
+        spectral = F.l1_loss(pred_fft, real_fft)
+        total = temporal + self.cfg["spectral_weight"] * spectral
+        return total, temporal, spectral
+
+    def fit(
+        self, XY: np.ndarray, seed: int = 0, verbose: bool = False
+    ) -> DiffusionTSR61Generator:
+        """Ajusta la distribución conjunta estandarizada sin cambiar de representación."""
+        XY = np.asarray(XY, dtype=np.float32)
+        if XY.ndim != 2 or XY.shape[1] != self.seq_len:
+            raise ValueError(f"XY debe tener forma (N, {self.seq_len}) = [X60 | y]")
+        return self.fit_paths(
+            XY,
+            x_mu=0.0,
+            x_sd=1.0,
+            y_mu=0.0,
+            y_sd=1.0,
+            seed=seed,
+            verbose=verbose,
+        )
+
+    def sample(self, n: int, seed: int = 0) -> np.ndarray:
+        """Muestrea directamente pares R61 estandarizados ``[X60 | y]``."""
+        return self.sample_paths(n, seed)

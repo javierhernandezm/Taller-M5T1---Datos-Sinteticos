@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pytest
 import torch
-import torch.nn as nn
+from torch import nn
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
@@ -34,7 +34,13 @@ sys.path.insert(0, str(REPO_ROOT))
 from src.config import Config
 from src.models import build_model
 from src.netviz import (
-    CANDIDATAS, Bloque, Diagrama, _escape, bloques_desde_modelo, diagramas_taller,
+    CANDIDATAS,
+    Bloque,
+    Diagrama,
+    _escape,
+    bloques_desde_modelo,
+    diagramas_taller,
+    render,
     tikz_source,
 )
 
@@ -50,6 +56,7 @@ def diagramas():
 # El walker frente a la realidad
 # --------------------------------------------------------------------------- #
 
+
 @pytest.mark.parametrize("clave", list(CANDIDATAS))
 def test_walker_coincide_con_el_forward(clave):
     """Las formas deducidas deben ser las que produce el modelo de verdad.
@@ -58,8 +65,11 @@ def test_walker_coincide_con_el_forward(clave):
     figura miente sobre la arquitectura congelada.
     """
     arch, kwargs = CANDIDATAS[clave]
-    modelo = (build_model(arch, in_len=CFG.window_len, **kwargs) if arch == "mlp"
-              else build_model(arch, **kwargs))
+    modelo = (
+        build_model(arch, in_len=CFG.window_len, **kwargs)
+        if arch == "mlp"
+        else build_model(arch, **kwargs)
+    )
     modelo.eval()
     with torch.no_grad():
         salida = modelo(torch.zeros(2, CFG.window_len))
@@ -94,10 +104,19 @@ def test_walker_rechaza_capas_desconocidas():
 # Coherencia del TikZ generado
 # --------------------------------------------------------------------------- #
 
-def test_se_generan_las_ocho_figuras(diagramas):
+
+def test_se_generan_las_diez_figuras(diagramas):
     assert [d.nombre for d in diagramas] == [
-        "16_arq_mlp_s", "17_arq_mlp_l", "18_arq_cnn_s", "19_arq_cnn_l",
-        "20_arq_vae", "21_arq_wgan_gp", "22_arq_realnvp", "23_pipeline_datos",
+        "16_arq_mlp_s",
+        "17_arq_mlp_l",
+        "18_arq_cnn_s",
+        "19_arq_cnn_l",
+        "29_arq_gru_s",
+        "30_arq_gru_l",
+        "20_arq_vae",
+        "21_arq_diffusion_ts",
+        "22_arq_realnvp",
+        "23_pipeline_datos",
     ]
 
 
@@ -122,8 +141,9 @@ def test_las_flechas_apuntan_a_nodos_existentes(diagramas):
         definidos = {b.name for b in d.bloques}
         tex = tikz_source(d)
         for origen, destino in re.findall(
-                r"\\draw \[connection\] \((\w+)-east\) -- node \{\\midarrow\} \((\w+)-west\)",
-                tex):
+            r"\\draw \[connection\] \((\w+)-east\) -- node \{\\midarrow\} \((\w+)-west\)",
+            tex,
+        ):
             assert origen in definidos, f"{d.nombre}: origen {origen} no existe"
             assert destino in definidos, f"{d.nombre}: destino {destino} no existe"
 
@@ -132,7 +152,7 @@ def test_todo_bloque_queda_conectado(diagramas):
     """Ningún bloque debe quedar suelto: sería un despiste de layout."""
     for d in diagramas:
         if not d.conexiones:
-            continue        # cadena implícita: todos conectados por construcción
+            continue  # cadena implícita: todos conectados por construcción
         tocados = {n for par in d.conexiones for n in par}
         sueltos = {b.name for b in d.bloques} - tocados
         assert not sueltos, f"{d.nombre}: bloques sin conectar {sueltos}"
@@ -150,6 +170,7 @@ def test_la_campeona_lleva_el_sello_de_congelada(diagramas):
 # --------------------------------------------------------------------------- #
 # Escapado de LaTeX (regresiones ya vividas)
 # --------------------------------------------------------------------------- #
+
 
 def test_escape_protege_el_guion_bajo():
     assert _escape("mlp_s") == r"mlp\_s"
@@ -175,14 +196,43 @@ def test_los_rotulos_de_los_bloques_van_escapados(diagramas):
 
 
 def test_bloque_sin_pie_no_emite_rotulo():
-    tex = tikz_source(Diagrama(
-        nombre="x", titulo="t", bloques=[Bloque(kind="densa", name="a", canales=4)]))
+    tex = tikz_source(
+        Diagrama(
+            nombre="x", titulo="t", bloques=[Bloque(kind="densa", name="a", canales=4)]
+        )
+    )
     assert r"\node[anchor=north" not in tex
+
+
+def test_render_sin_latex_crea_png_fallback(tmp_path, monkeypatch):
+    """Una arquitectura nueva no desaparece por no tener TeX ni PNG cacheado."""
+    from src.netviz import LatexNoDisponible
+
+    def sin_latex(*_args, **_kwargs):
+        raise LatexNoDisponible("entorno de prueba sin pdflatex")
+
+    monkeypatch.setattr("src.netviz._compilar", sin_latex)
+    diag = Diagrama(
+        nombre="arquitectura_nueva",
+        titulo="Arquitectura de prueba",
+        subtitulo="fallback reproducible",
+        bloques=[
+            Bloque(kind="dato", name="entrada", etiqueta="61"),
+            Bloque(kind="salida", name="salida", etiqueta="61"),
+        ],
+    )
+
+    salida = render(diag, fig_dir=tmp_path, verbose=False)
+
+    assert salida == tmp_path / "arquitectura_nueva.png"
+    assert salida.exists() and salida.stat().st_size > 0
+    assert (tmp_path / "tex" / "arquitectura_nueva.tex").exists()
 
 
 # --------------------------------------------------------------------------- #
 # El espejo de los hiperparámetros del notebook 03
 # --------------------------------------------------------------------------- #
+
 
 def _generadores_del_notebook_03() -> dict[str, dict]:
     """Extrae el literal `GENERADORES = {...}` del notebook 03 con `ast`.
@@ -193,21 +243,31 @@ def _generadores_del_notebook_03() -> dict[str, dict]:
     import ast
     import json
 
-    nb = json.loads((REPO_ROOT / "notebooks" / "03_generadores.ipynb")
-                    .read_text(encoding="utf-8"))
-    fuente = next(("".join(c["source"]) for c in nb["cells"]
-                   if c["cell_type"] == "code" and "GENERADORES = {" in "".join(c["source"])),
-                  None)
+    nb = json.loads(
+        (REPO_ROOT / "notebooks" / "03_generadores.ipynb").read_text(encoding="utf-8")
+    )
+    fuente = next(
+        (
+            "".join(c["source"])
+            for c in nb["cells"]
+            if c["cell_type"] == "code" and "GENERADORES = {" in "".join(c["source"])
+        ),
+        None,
+    )
     assert fuente is not None, "no se encontró GENERADORES en el notebook 03"
 
     arbol = ast.parse(fuente)
-    asignacion = next(n for n in ast.walk(arbol)
-                      if isinstance(n, ast.Assign)
-                      and getattr(n.targets[0], "id", None) == "GENERADORES")
+    asignacion = next(
+        n
+        for n in ast.walk(arbol)
+        if isinstance(n, ast.Assign)
+        and getattr(n.targets[0], "id", None) == "GENERADORES"
+    )
     salida: dict[str, dict] = {}
     for clave, llamada in zip(asignacion.value.keys, asignacion.value.values):
-        salida[clave.value] = {kw.arg: ast.literal_eval(kw.value)
-                               for kw in llamada.keywords}
+        salida[clave.value] = {
+            kw.arg: ast.literal_eval(kw.value) for kw in llamada.keywords
+        }
     return salida
 
 
@@ -225,7 +285,8 @@ def test_los_hiperparametros_dibujados_son_los_del_notebook_03():
         assert nombre in del_notebook, f"{nombre} ya no está en el notebook 03"
         assert kwargs == del_notebook[nombre], (
             f"{nombre}: netviz.GENERADORES_03 dice {kwargs} pero el notebook 03 "
-            f"construye {del_notebook[nombre]}")
+            f"construye {del_notebook[nombre]}"
+        )
 
 
 def test_realnvp_dibuja_las_capas_que_se_entrenan(diagramas):

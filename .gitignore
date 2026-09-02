@@ -32,3 +32,5 @@ reports/figures/tex/*.log
 reports/diffusion_ts_experiment/**/checkpoints/
 reports/diffusion_ts_experiment/**/synthetic/
 reports/diffusion_ts_experiment/smoke/
+reports/diffusion_ts_r61/**/checkpoints/
+reports/diffusion_ts_r61/**/synthetic/

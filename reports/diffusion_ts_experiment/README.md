@@ -1,5 +1,10 @@
 # Investigación Diffusion-TS
 
+> **Experimento exploratorio R81, superado por la comparación estricta R61.** Este informe
+> se conserva por trazabilidad, pero no sostiene la decisión activa porque Diffusion-TS veía
+> 20 retornos adicionales. El pipeline completo y el veredicto definitivo están en
+> [`../diffusion_ts_r61/FINAL_CONCLUSION.md`](../diffusion_ts_r61/FINAL_CONCLUSION.md).
+
 ## Veredicto
 
 **Sí merece incorporarse al pipeline experimental en sustitución de WGAN-GP.**
