@@ -318,10 +318,10 @@
         list:["MLP","ConvNet1D","build_model","count_params"] } },
 
     { id:"n8", col:3, y:180, type:"proc", title:"02_downstream_baselines.ipynb",
-      sub:"usa baselines · models · training · eda · netviz", stat:"campeona cnn_l · R² test 0,456",
+      sub:"usa baselines · models · training · eda · netviz", stat:"campeona gru_l · R² test 0,472",
       detail:{
         que:"Fija el suelo (3 baselines sin redes) y la arquitectura downstream que queda congelada para el resto del taller. 4 candidatas (MLP/CNN chicas y grandes), elegida por MSE en validación real, reentrenada con 3 semillas para medir ruido de optimización.",
-        stats:[["HAR-RV (suelo) test R²","0,359"],["campeona","cnn_l — 68.225 params"],["test R² (3 semillas)","0,456 ± 0,006"],["umbral de ruido","±0,006"]] } },
+        stats:[["HAR-RV (suelo) test R²","0,359"],["campeona","gru_l — 84.601 params"],["test R² (3 semillas)","0,472 ± 0,005"],["umbral de ruido","±0,006"]] } },
 
     { id:"s_training", col:3, y:345, type:"script", title:"training.py",
       sub:"src/ · importado por 02, 03 y 04", stat:"train_model · get_device",
@@ -378,7 +378,7 @@
       sub:"reports/figures/ · 09–10, 16–19, 23", stat:"convergencia · pred vs real · arquitecturas",
       detail:{
         que:"Curvas de loss de las 4 arquitecturas candidatas y el hexbin predicción-vs-realidad de la campeona en test (09–10); más la ficha visual de esas mismas 4 candidatas y el diagrama del pipeline de datos, generadas por netviz.py a partir de los nn.Module reales (16–19, 23).",
-        list:["09_convergencia_candidatas.png","10_pred_vs_real.png","16_arq_mlp_s.png","17_arq_mlp_l.png","18_arq_cnn_s.png","19_arq_cnn_l.png","23_pipeline_datos.png"] } },
+        list:["09_convergencia_candidatas.png","10_pred_vs_real.png","16_arq_mlp_s.png","17_arq_mlp_l.png","18_arq_cnn_s.png","19_arq_cnn_l.png","29_arq_gru_s.png","30_arq_gru_l.png","23_pipeline_datos.png"] } },
 
     { id:"n13", col:4, y:440, type:"fig", title:"9 figuras",
       sub:"reports/figures/ · 11–13, 20–22, 24–26", stat:"convergencia · marginales · Q-Q · colas · TSTR",
@@ -414,18 +414,18 @@
         stats:[["malla REDUCIDA","3 N × 3 ratios × 6 generadores × 3 semillas"],["celdas","117 (2,8 min en RTX 5070)"],["N reales probados","250 · 1.000 · 3.000"],["mejor predictor de la ganancia","ratio TSTR — Spearman +0,94"]],
         nota:"Hallazgo central: por debajo de ~1.000 ventanas reales el sintético no ayuda (y a menudo empeora); el RealNVP es el único generador que mejora de forma consistente por encima de ese umbral, y la gaussiana empeora siempre. Y el corolario que cierra el círculo: la auditoría del 03 —4 minutos— anticipa el orden de mérito que esta malla tarda horas en establecer." } },
 
-    { id:"n15", col:6, y:120, type:"data", title:"malla_reducida.csv",
+    { id:"n15", col:6, y:120, type:"data", title:"malla_ratios_finos.csv",
       sub:"data/processed/ · 13 KB", stat:"117 filas — una por celda",
       detail:{
         que:"Resultado crudo de cada celda de la malla: n_real, generador, ratio, semilla, val_mse, test_r2, época del mejor peso, segundos de entrenamiento.",
         stats:[["filas","117"],["se reanuda solo","sí — cada celda se escribe al terminar"]] } },
 
-    { id:"n16", col:6, y:250, type:"data", title:"malla_reducida_resumen.csv",
+    { id:"n16", col:6, y:250, type:"data", title:"malla_ratios_finos_resumen.csv",
       sub:"data/processed/ · 3 KB", stat:"media / sd de R² entre semillas",
       detail:{
         que:"Agregado por (n_real, generador, ratio): media y desviación de test_r2 entre las 3 semillas — la tabla que alimenta la curva de aprendizaje." } },
 
-    { id:"n17", col:6, y:380, type:"data", title:"malla_reducida_delta.csv",
+    { id:"n17", col:6, y:380, type:"data", title:"malla_ratios_finos_delta.csv",
       sub:"data/processed/ · 4 KB", stat:"Δ R² pareado + veredicto",
       detail:{
         que:"Comparación pareada por semilla contra la celda de solo-real (misma semilla): cancela la varianza del submuestreo y deja solo el efecto del dato sintético. Exige |t| ≥ 2,5 para hablar de efecto.",
