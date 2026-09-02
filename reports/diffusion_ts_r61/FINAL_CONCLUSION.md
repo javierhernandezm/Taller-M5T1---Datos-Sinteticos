@@ -111,12 +111,12 @@ práctico. La diferencia con WGAN-GP sí es material: su referencia histórica e
 
 | Métrica | Real | Diffusion | RealNVP |
 |---|---:|---:|---:|
-| sd(X) | 1,0028 | **0,6925** | 0,9404 |
-| sd(y) | 0,9883 | **0,8110** | 0,9683 |
-| curtosis de X | 25,24 | 20,32 | 22,48 |
-| ACF(|r|), lag 1 | 0,0618 | **−0,0135** | 0,0420 |
-| AUC discriminativa | 0,500 ideal | **0,7840** | 0,6622 |
-| W1 por columna | 0 ideal | **0,1873** | 0,0543 |
+| sd(X) | 1,0028 | **0,6919** | 0,9226 |
+| sd(y) | 0,9883 | **0,8138** | 0,9809 |
+| curtosis de X | 25,24 | 19,85 | 23,24 |
+| ACF(|r|), lag 1 | 0,0618 | **−0,0135** | 0,0424 |
+| AUC discriminativa | 0,500 ideal | **0,7866** | 0,6547 |
+| W1 por columna | 0 ideal | **0,1868** | 0,0567 |
 
 Diffusion conserva bien las colas y la relación predictiva, pero produce trayectorias
 infradispersas y sin clustering. El resultado TSTR no debe leerse como fidelidad total.

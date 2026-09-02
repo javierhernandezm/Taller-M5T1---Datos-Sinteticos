@@ -275,12 +275,12 @@ porque habría recibido 20 retornos que ningún rival ve; no se versiona.
 
 | Generador | sd(X) | Curtosis | ACF\|r\| lag1 | AUC | ratio TSTR/TRTR |
 |---|---:|---:|---:|---:|---:|
-| jitter | 1,000 | 23,57 | **0,058** | **0,507** | 0,9233 |
-| gaussiana | 1,001 | 0,03 | −0,015 | 0,958 | **−0,3876** |
-| block bootstrap | 0,990 | 26,16 | 0,125 | 0,760 | 0,6237 |
-| VAE | 0,909 | 1,50 | −0,005 | 0,900 | 0,6633 |
-| **Diffusion-TS R61** | **0,693** | 20,32 | −0,013 | 0,784 | **0,9472** |
-| RealNVP | 0,940 | 22,48 | **0,042** | **0,662** | **0,9467** |
+| jitter | 1,000 | 23,57 | **0,058** | **0,498** | 0,9233 |
+| gaussiana | 1,001 | 0,03 | −0,015 | 0,959 | **−0,3876** |
+| block bootstrap | 0,990 | 26,16 | 0,125 | 0,756 | 0,6237 |
+| VAE | 0,910 | 1,43 | −0,006 | 0,895 | 0,6633 |
+| **Diffusion-TS R61** | **0,692** | 19,85 | −0,014 | 0,787 | **0,9472** |
+| RealNVP | 0,923 | 23,24 | **0,042** | **0,655** | **0,9467** |
 
 > Diffusion-TS encabeza el TSTR activo con R² 0,4773, pero aventaja a RealNVP solo en
 > **0,00025 R²**: es un empate práctico. Su fidelidad es peor —contrae la escala un 31 % y

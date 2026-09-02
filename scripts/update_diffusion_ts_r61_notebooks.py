@@ -45,16 +45,16 @@ Referencia real: desviación de X 1,003 · curtosis 25,24 · ACF(|r|) lag-1 0,06
 
 | Generador | sd(X) | Curtosis | ACF\|r\| lag1 | AUC | W1 por columna | Lectura |
 |---|---:|---:|---:|---:|---:|---|
-| jitter | 1,000 | 23,57 | **0,058** | **0,507** | **0,026** | casi indistinguible porque recicla train |
-| gaussiana | 1,001 | 0,03 | −0,015 | 0,958 | 0,236 | falla colas y clustering |
-| block_bootstrap | 0,990 | 26,16 | 0,125 | 0,760 | 0,057 | colas buenas, dependencia exagerada |
-| VAE | 0,909 | 1,50 | −0,005 | 0,900 | 0,157 | sobre-suavizado |
-| **Diffusion-TS R61** | **0,693** | 20,32 | −0,013 | 0,784 | 0,187 | buenas colas, clara contracción y sin clustering |
-| RealNVP | 0,940 | 22,48 | **0,042** | **0,662** | **0,054** | mejor fidelidad neuronal global |
+| jitter | 1,000 | 23,57 | **0,058** | **0,498** | **0,026** | casi indistinguible porque recicla train |
+| gaussiana | 1,001 | 0,03 | −0,015 | 0,959 | 0,236 | falla colas y clustering |
+| block_bootstrap | 0,990 | 26,16 | 0,125 | 0,756 | 0,057 | colas buenas, dependencia exagerada |
+| VAE | 0,910 | 1,43 | −0,006 | 0,895 | 0,158 | sobre-suavizado |
+| **Diffusion-TS R61** | **0,692** | 19,85 | −0,014 | 0,787 | 0,187 | buenas colas, clara contracción y sin clustering |
+| RealNVP | 0,923 | 23,24 | **0,042** | **0,655** | **0,057** | mejor fidelidad neuronal global |
 
-Diffusion-TS recupera el 81 % de la curtosis real, pero reduce la dispersión de X un 31 %,
-la de `y` un 18 % y no reproduce el clustering de volatilidad. Por eso su AUC 0,784 es
-peor que el 0,662 de RealNVP. El diagnóstico impide confundir una utilidad predictiva alta
+Diffusion-TS recupera el 79 % de la curtosis real, pero reduce la dispersión de X un 31 %,
+la de `y` un 18 % y no reproduce el clustering de volatilidad. Por eso su AUC 0,787 es
+peor que el 0,655 de RealNVP. El diagnóstico impide confundir una utilidad predictiva alta
 con una réplica completa de la distribución financiera.
 
 ### 5.2 Utilidad TSTR con el protocolo oficial del notebook
