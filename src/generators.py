@@ -41,7 +41,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from .diffusion_ts import DiffusionTSR61Generator  # noqa: F401 - public re-export
+from .diffusion_ts import DiffusionTSR61Generator
 from .training import get_device
 
 # =========================================================================== #
@@ -62,6 +62,14 @@ class BaseGenerator(ABC):
 
     #: historia de entrenamiento {clave: [valores por época]}; vacío en los no-neuronales
     history_: dict[str, list[float]]
+
+
+# Diffusion-TS vive en su propio módulo porque arrastra el denoiser, el
+# calendario de ruido y el muestreo DDIM; heredar de `BaseGenerator` crearía un
+# ciclo de imports (este módulo ya importa de `diffusion_ts`). El registro como
+# subclase virtual deja el contrato explícito: `isinstance(gen, BaseGenerator)`
+# vale para los seis generadores activos, no solo para los cinco de aquí.
+BaseGenerator.register(DiffusionTSR61Generator)
 
 
 # =========================================================================== #

@@ -20,6 +20,7 @@ from src.diffusion_ts import (
     paths_to_xy,
     reconstruct_return_paths,
 )
+from src.generators import BaseGenerator
 
 
 def test_reconstruccion_usa_solo_continuidad_demostrada():
@@ -138,6 +139,7 @@ def test_r61_respeta_el_contrato_comun_y_el_target_es_token_especial(
     ).fit(XY, seed=13)
 
     synth = gen.sample(7, seed=101)
+    assert isinstance(gen, BaseGenerator)  # el contrato común, no solo duck typing
     assert gen.name == "diffusion_ts"
     assert gen.seq_len == 9
     assert synth.shape == (7, 9)
@@ -169,3 +171,6 @@ def test_factory_de_malla_usa_r61_y_la_configuracion_oficial():
     assert gen.cfg["sample_steps"] == 50
     assert "diffusion_ts" in GENERADORES_ACTIVOS
     assert "wgan_gp" not in GENERADORES_ACTIVOS
+    # los seis activos comparten el contrato declarado en generators.py
+    for nombre in GENERADORES_ACTIVOS:
+        assert isinstance(construir_generador(nombre), BaseGenerator), nombre

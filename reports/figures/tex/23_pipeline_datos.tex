@@ -154,8 +154,8 @@
 \node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] pstd-south) {\textbf{estandarizar} \\ mu, sd de train \\ (congelados)};
 \node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] pred-south) {\textbf{red congelada} \\ downstream \\ reference.json};
 \node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] py-south) {\textbf{y = ln sigma} \\ 21d adelante \\ anualizada};
-\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] pgen-south) {\textbf{generador} \\ VAE / WGAN-GP \\ RealNVP};
+\node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] pgen-south) {\textbf{generador} \\ VAE / Diffusion-TS \\ RealNVP};
 \node[anchor=north, align=center, font=\scriptsize, text width=2.2cm, inner sep=2pt, fill=white, fill opacity=0.82, text opacity=1] at ([yshift=-26pt] psint-south) {\textbf{ventanas} \\ sintéticas \\ {}[X | y]};
-\node[anchor=south west, align=left, inner sep=0pt] at ([yshift=14pt] current bounding box.north west) {\begin{tabular}{@{}l@{}} \bfseries\large Pipeline del taller — del precio al target, con la rama sintética \\ \mdseries\small ventana 60d -> horizonte 21d · anualización 252 · embargo 21d · la red del centro es la MISMA en las 117 celdas de la malla \end{tabular}};
+\node[anchor=south west, align=left, inner sep=0pt] at ([yshift=14pt] current bounding box.north west) {\begin{tabular}{@{}l@{}} \bfseries\large Pipeline del taller — del precio al target, con la rama sintética \\ \mdseries\small ventana 60d -> horizonte 21d · anualización 252 · embargo 21d · la red del centro es la MISMA en las 798 celdas de las dos mallas \end{tabular}};
 \end{tikzpicture}
 \end{document}
